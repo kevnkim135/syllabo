@@ -8,7 +8,8 @@
 - `POST /api/lesson` body `LessonRequest` `{ subject, kind, level?, focus?, explored?, request?, variant? }`
   -> `{ kind, subject, data: LessonMap[kind] }`
   - `focus`: specific topic inside the subject; every kind is generated about it.
-  - `explored` (problems): topics the student opened; problems build on them.
+  - `explored` (problems): topics the student opened; problems build on them and set `Problem.topic`
+    (validated server-side against `explored`, so it is always one of those strings or absent).
   - `request` (visual): free text such as "benzene"; `variant` (visual): 1, 2, ... for a different example.
 - `POST /api/expand` body `{ subject, topic, path?: string[], level? }` -> `TopicDetail`
   `{ title, explanation, keyPoints[], example?, subtopics: TopicNode[] }`

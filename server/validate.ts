@@ -80,7 +80,7 @@ export function validateScope(raw: unknown): ScopeInfo | undefined {
 
 export const validateProblem = (raw: unknown): Problem | undefined => validate('problems', [raw])?.[0];
 
-export function validate<K extends LessonKind>(kind: K, raw: unknown): LessonMap[K] | undefined {
+export function validate<K extends LessonKind>(kind: K, raw: unknown, explored: string[] = []): LessonMap[K] | undefined {
   // Models sometimes wrap arrays: {"events": [...]}
   const arr = (x: unknown) => (Array.isArray(x) ? x : isObj(x) ? Object.values(x).find(Array.isArray) : undefined);
   switch (kind) {
@@ -102,7 +102,13 @@ export function validate<K extends LessonKind>(kind: K, raw: unknown): LessonMap
     case 'problems': {
       const out = arr(raw)
         ?.filter((p) => isObj(p) && str(p.prompt) && str(p.solution))
-        .map((p) => ({ ...(p as object), difficulty: ['base', 'intro', 'core', 'edge'].includes((p as { difficulty: string }).difficulty) ? (p as { difficulty: string }).difficulty : 'core' }));
+        .map((p) => {
+          const { topic, ...rest } = p as Record<string, unknown>;
+          const difficulty = ['base', 'intro', 'core', 'edge'].includes(rest.difficulty as string) ? rest.difficulty : 'core';
+          // A topic is kept only when it names one the student actually explored (case-insensitive).
+          const match = str(topic) ? explored.find((t) => t.toLowerCase() === topic.trim().toLowerCase()) : undefined;
+          return { ...rest, difficulty, ...(match ? { topic: match } : {}) };
+        });
       return (out?.length ? out : undefined) as LessonMap[K] | undefined;
     }
     case 'visual':

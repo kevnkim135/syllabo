@@ -135,6 +135,8 @@ export function fixture<K extends LessonKind>(kind: K, subjectName: string, req:
     ],
     visual,
   };
+  const explored = req.explored ?? [];
+  if (explored.length) all.problems = all.problems.map((p, i) => (i < explored.length * 2 ? { ...p, topic: explored[i % explored.length] } : p));
   return all[kind];
 }
 

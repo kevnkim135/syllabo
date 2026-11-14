@@ -1,5 +1,5 @@
 // Links the practice set back to the topic map. The API returns a flat list of problems written to
-// "build on" the explored topics; a problem is attached to a topic when its text names that topic.
+// "build on" the explored topics; a problem is attached to its `topic` field, or else to a topic its text names.
 import type { Problem } from '../../../../shared/types';
 
 export interface Numbered {
@@ -36,7 +36,10 @@ export function branchByExplored(problems: Problem[], explored: string[], subjec
   const rest: Numbered[] = [];
   problems.forEach((p, i) => {
     const text = `${p.prompt}\n${p.why ?? ''}`;
-    const builds = explored.filter((t) => namesTopic(text, t, subject));
+    // Prefer the server's explicit topic; fall back to matching topic names in the text.
+    const named = explored.filter((t) => namesTopic(text, t, subject));
+    const tagged = p.topic && explored.includes(p.topic) ? p.topic : undefined;
+    const builds = tagged ? [tagged, ...named.filter((t) => t !== tagged)] : named;
     (builds.length ? byTopic.get(builds[0])! : rest).push({ p, n: i + 1, builds });
   });
   const branches: Branch[] = explored.map((topic) => ({ topic, items: byTopic.get(topic)! })).filter((b) => b.items.length);

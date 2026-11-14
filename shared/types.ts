@@ -25,6 +25,7 @@ export interface Problem {
   solution: string;
   difficulty: 'base' | 'intro' | 'core' | 'edge'; // base = trivial/base case, edge = borderline case
   why?: string;
+  topic?: string; // the explored topic this problem builds on, copied verbatim from LessonRequest.explored
 }
 
 // ---- Interactive visual specs (LLM picks one) ----

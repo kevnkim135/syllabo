@@ -18,7 +18,7 @@ Mix three types: "discovery" (a finding or invention), "event" (a historical eve
 - "intro": 2 straightforward problems applying a single idea
 - "core": 3-4 standard problems combining ideas
 - "edge": 2-3 borderline cases where students commonly go wrong (limits, degenerate inputs, sign errors, units, division by zero)
-[{"prompt": "...", "solution": "numbered step-by-step worked solution", "difficulty": "base", "why": "what this tests and the common mistake"}]`,
+[{"prompt": "...", "solution": "numbered step-by-step worked solution", "difficulty": "base", "why": "what this tests and the common mistake", "topic": "only when the student studied topics are listed above: the one this problem builds on, copied exactly; otherwise omit"}]`,
 
   visual: `A JSON object describing ONE interactive 3D model that best illustrates a core idea of the subject. Pick exactly one shape:
 
@@ -40,7 +40,7 @@ export function buildPrompt({ subject, kind, level = 'high school', focus, explo
   const lines = [`Subject: ${subject}`, `Audience level: ${level}`];
   if (focus) lines.push(`Focus: "${focus}". Everything you produce must be about this specific topic within the subject.`);
   if (kind === 'problems' && explored?.length) {
-    lines.push(`The student just studied: ${explored.join('; ')}. At least half the problems must build directly on these.`);
+    lines.push(`The student just studied: ${explored.join('; ')}. At least half the problems must build directly on these, and each of those must set "topic" to the topic it builds on, copied exactly from this list.`);
   }
   if (kind === 'visual' && request) {
     lines.push(`The student asked to see: "${request}". Model exactly that, choosing whichever shape fits the request regardless of the subject.`);
