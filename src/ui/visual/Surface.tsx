@@ -3,11 +3,13 @@ import { compile } from 'mathjs';
 import * as THREE from 'three';
 import type { SurfaceSpec } from '../../../shared/types';
 import { clamp } from '../../utils/gestureMath';
+import { palette } from './palette';
 
 const N = 80; // grid resolution
 const SIZE = 6; // scene units across
 
 export function Surface({ spec }: { spec: SurfaceSpec }) {
+  const p = palette();
   const geom = useMemo(() => {
     const g = new THREE.PlaneGeometry(SIZE, SIZE, N, N);
     let f: (x: number, y: number) => number = () => 0;
@@ -36,11 +38,15 @@ export function Surface({ spec }: { spec: SurfaceSpec }) {
       pos.setZ(i, z);
     }
 
-    // Height-based color: blue (low) -> red (high).
+    // Height-based color from the palette: forest (low) -> violet -> lilac (high).
     const lo = Math.min(...zs);
     const span = Math.max(...zs) - lo || 1;
+    const [low, mid, high] = [p.forest, p.violet, p.lilac200].map((c) => new THREE.Color(c));
     const color = new THREE.Color();
-    const colors = zs.flatMap((z) => color.setHSL(0.66 * (1 - (z - lo) / span), 0.8, 0.55).toArray());
+    const colors = zs.flatMap((z) => {
+      const t = (z - lo) / span;
+      return (t < 0.5 ? color.lerpColors(low, mid, t * 2) : color.lerpColors(mid, high, t * 2 - 1)).toArray();
+    });
     g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
 
     g.rotateX(-Math.PI / 2); // z-up math -> y-up scene
@@ -56,10 +62,10 @@ export function Surface({ spec }: { spec: SurfaceSpec }) {
         <meshStandardMaterial vertexColors side={THREE.DoubleSide} roughness={0.6} />
       </mesh>
       <mesh geometry={geom}>
-        <meshBasicMaterial wireframe color="#ffffff" transparent opacity={0.08} />
+        <meshBasicMaterial wireframe color={p.white} transparent opacity={0.14} />
       </mesh>
-      <gridHelper args={[SIZE, 12, '#445', '#223']} />
-      <axesHelper args={[4]} />
+      <gridHelper args={[SIZE, 12, p.violet, p.lilac200]} />
+      <axesHelper args={[4]} ref={(a) => void a?.setColors(p.violet, p.forest, p.violet)} />
     </group>
   );
 }
