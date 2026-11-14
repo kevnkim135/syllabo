@@ -2,10 +2,12 @@
 
 Type any subject and get a full, explorable lesson:
 
-- **History:** a timeline with discoveries, events and prominent figures color-coded
-- **Topic map:** a complete overview of the field; click any topic for an in-depth explanation, then keep drilling into deeper subtopics
-- **Problems:** worked examples ordered from base cases through edge cases, with hints and filters
-- **Interactive model:** a 3D visual you control with **hand gestures and voice**. Chemistry gets molecules, multivariable calculus gets surfaces, physics gets force diagrams.
+- **Topic map:** a broad subject opens a hub that asks what to explore; a specific topic opens notes you can expand deeper and deeper
+- **History:** a timeline of discoveries, events and prominent figures
+- **Problems:** samples from base cases to edge cases that follow what you explored, plus your own problems typed, spoken or as a screenshot
+- **Interactive model:** a 3D molecule, surface or diagram you control with **hand gestures and voice**, or request by name ("show me methane")
+
+Narrowing the focus in one section updates all four.
 
 Built at **SanD Hacks 2026** (UCSD). Submission checklist and deadlines: [SUBMISSION.md](SUBMISSION.md).
 
@@ -39,20 +41,20 @@ Camera and mic only work on `localhost` or HTTPS.
 
 ## Layout
 ```
-shared/types.ts        contract: lesson + visual spec types (server & UI)
-server/                API: routes, prompts, LLM call, mock fixtures
-src/core/              app logic: api client, command bus, input/ (gestures, voice)
-src/ui/                React: App, panels/ (timeline, topics, problems), visual/ (3D scenes)
-src/utils/             pure helpers (gesture math, element colors)
+shared/types.ts        contract: lesson, visual spec and API types (server & UI)
+server/                API: routes, prompts, LLM calls, validation, mock fixtures
+src/core/              lesson.ts (shared state), commands.ts (command bus), api.ts, input/ (gestures, voice, keys)
+src/ui/                App shell; home/ (landing page), shell/ (sidebar), panels/ (history, topics, problems), visual/ (3D)
+src/ui/styles/         tokens.css (palette) + one stylesheet per area
+tests/                 unit tests for gesture math and voice parsing
 ```
-Every input (mouse, gesture, voice) goes through `src/core/commands.ts`, so a new gesture works in every visual automatically.
+Every input (mouse, keys, gesture, voice) goes through `src/core/commands.ts`, so a new gesture works everywhere automatically.
 
 ## Controls
-- **Two-hand steering:** pinch with both hands like gripping a wheel. Turn it to rotate the view, raise/lower both hands to tilt, spread/close to zoom
-- **Other gestures:** one-hand pinch + drag to rotate · fast open-hand swipe to change tabs
-- **Voice:** "zoom in/out", "rotate left/right/up/down", "top/front/side view", "reset", "next", "previous"
-- **Keyboard:** arrows rotate (Shift = bigger steps) · + / - zoom · T / F / S views · R reset · 1-4 tabs
-- **On-screen:** rotate / zoom / view buttons in the corner of the 3D stage; mouse drag and scroll also work
+- **Navigate:** sidebar, keys 1-4 (0 = home), or say "go to history", "open the topic map", "go home"
+- **Request content by voice:** "show me benzene", "graph x squared minus y squared", "another example", "solve ..."
+- **Model:** mouse drag and scroll, arrow keys, + / -, T / F / S views, R reset, on-screen buttons
+- **Gestures:** being reworked (see `TASKS.md`, Agent 2); the current build has two-hand steering and one-hand pinch rotate
 
 ## Building in parallel
 `AGENTS.md`, `TASKS.md` and `.superset/` are set up for running several coding agents at once in Paradev, one worktree per task. See `docs/PARALLEL.md`.

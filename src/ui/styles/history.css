@@ -1,0 +1,18 @@
+/* Owner: history agent */
+.legend { display: flex; gap: 1.25rem; list-style: none; padding: 0; margin: 0 0 1rem; color: var(--muted); font-size: 0.85rem; }
+.legend li { display: flex; align-items: center; gap: 0.4rem; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+.dot.discovery { background: var(--forest); }
+.dot.event { background: var(--violet); }
+.dot.figure { background: var(--lilac-200); box-shadow: inset 0 0 0 2px var(--violet); }
+.timeline { list-style: none; padding: 0; margin: 0; position: relative; }
+.timeline::before { content: ''; position: absolute; left: 111px; top: 0; bottom: 0; width: 2px; background: var(--line-strong); }
+.timeline li { display: grid; grid-template-columns: 96px 32px 1fr; align-items: start; margin-bottom: 0.75rem; }
+.timeline .year { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; padding-top: 0.85rem; }
+.timeline li > .dot { margin: 1.15rem auto 0; position: relative; outline: 4px solid var(--bg); }
+.timeline .card { padding: 0.75rem 1rem; max-width: 820px; }
+.timeline .card p { margin: 0.3rem 0 0; }
+.timeline li.discovery .card { border-left: 3px solid var(--forest); }
+.timeline li.event .card { border-left: 3px solid var(--violet); }
+.timeline li.figure .card { border-left: 3px solid var(--lilac-200); }
+.person { margin-left: 0.6rem; font-size: 0.82rem; color: var(--violet); background: var(--accent-soft); padding: 1px 9px; border-radius: var(--pill); }

@@ -15,7 +15,7 @@ export function VisualStage({ spec, paused = false }: { spec: VisualSpec; paused
     <div className="stage-layout">
     <div className="stage">
       <Canvas camera={{ position: [6, 5, 6], fov: 50 }} frameloop={paused ? 'never' : 'always'}>
-        <color attach="background" args={['#0b1020']} />
+        <color attach="background" args={['#f6f0ff']} />
         <ambientLight intensity={0.6} />
         <directionalLight position={[5, 10, 5]} intensity={1.2} />
         {spec.kind === 'molecule' && <Molecule spec={spec} />}
@@ -39,8 +39,8 @@ export function VisualStage({ spec, paused = false }: { spec: VisualSpec; paused
         <ul className="muted">
           <li>One-hand pinch and drag: rotate</li>
           <li>Open-hand swipe: next / previous tab</li>
-          <li>Voice: "rotate left", "zoom in", "top view", "reset", "next"</li>
-          <li>Keys: arrows, + / -, T F S, R, 1-4</li>
+          <li>Voice: "show me methane", "graph x squared plus y squared", "another example"</li>
+          <li>Keys: arrows, + / -, T F S, R</li>
           <li>Mouse: drag to orbit, scroll to zoom</li>
         </ul>
       </aside>

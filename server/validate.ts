@@ -1,6 +1,6 @@
 // Runtime validation of model output against shared/types.ts. Returns a cleaned value or undefined.
 import { evaluate } from 'mathjs';
-import type { LessonKind, LessonMap, TopicDetail, TopicNode, VisualSpec } from '../shared/types';
+import type { LessonKind, LessonMap, Problem, ScopeInfo, TopicDetail, TopicNode, VisualSpec } from '../shared/types';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
@@ -69,13 +69,30 @@ export function validateDetail(raw: unknown): TopicDetail | undefined {
   };
 }
 
+export function validateScope(raw: unknown): ScopeInfo | undefined {
+  if (!isObj(raw) || !str(raw.overview)) return undefined;
+  return {
+    scope: raw.scope === 'specific' ? 'specific' : 'broad',
+    overview: raw.overview,
+    suggestions: Array.isArray(raw.suggestions) ? raw.suggestions.filter(str).slice(0, 8) : [],
+  };
+}
+
+export const validateProblem = (raw: unknown): Problem | undefined => validate('problems', [raw])?.[0];
+
 export function validate<K extends LessonKind>(kind: K, raw: unknown): LessonMap[K] | undefined {
   // Models sometimes wrap arrays: {"events": [...]}
   const arr = (x: unknown) => (Array.isArray(x) ? x : isObj(x) ? Object.values(x).find(Array.isArray) : undefined);
   switch (kind) {
     case 'timeline': {
-      const out = arr(raw)?.filter((e) => isObj(e) && str(e.year) && str(e.title) && str(e.detail))
-        .map((e) => ({ ...(e as object), type: ['discovery', 'event', 'figure'].includes((e as { type: string }).type) ? (e as { type: string }).type : undefined }));
+      const types = ['discovery', 'event', 'figure'];
+      const out = arr(raw)
+        ?.filter((e): e is Record<string, unknown> => isObj(e) && str(e.year) && str(e.title) && str(e.detail))
+        .map((e) => ({
+          ...e,
+          type: types.includes(e.type as string) ? e.type : undefined,
+          related: Array.isArray(e.related) ? e.related.filter(str).slice(0, 5) : undefined,
+        }));
       return (out?.length ? out : undefined) as LessonMap[K] | undefined;
     }
     case 'topics': {

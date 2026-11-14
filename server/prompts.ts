@@ -1,4 +1,4 @@
-import type { ExpandRequest, LessonKind } from '../shared/types';
+import type { ExpandRequest, LessonKind, LessonRequest, SolveRequest } from '../shared/types';
 
 export const SYSTEM = `You are an expert teacher and curriculum designer.
 Be accurate and prefer well-established facts, names and dates.
@@ -8,7 +8,7 @@ Write math as plain text (x^2, sqrt(x), integral of f dx), never LaTeX.`;
 const SCHEMAS: Record<LessonKind, string> = {
   timeline: `A JSON array of 10-16 events in chronological order covering the field's full history.
 Mix three types: "discovery" (a finding or invention), "event" (a historical event, publication, institution, war, experiment) and "figure" (a milestone in a prominent person's life or work). Always name the person when there is one.
-[{"year": "1869", "type": "discovery", "title": "Periodic table", "figure": "Dmitri Mendeleev", "detail": "1-2 sentences on the finding and why it mattered"}]`,
+[{"year": "1869", "type": "discovery", "title": "Periodic table", "figure": "Dmitri Mendeleev", "detail": "1-2 sentences on the finding and why it mattered", "related": ["2-4 short related terms, people or ideas worth exploring next"]}]`,
 
   topics: `A JSON array of 5-8 top-level topics that together give a complete overview of the subject. Each has a one-sentence summary and 2-5 children (subtopics, each with a summary, no deeper nesting needed: the user can click to expand any of them later):
 [{"title": "...", "summary": "one sentence", "children": [{"title": "...", "summary": "one sentence"}]}]`,
@@ -36,8 +36,40 @@ Mix three types: "discovery" (a finding or invention), "event" (a historical eve
 ]}`,
 };
 
-export function buildPrompt(subject: string, kind: LessonKind, level = 'high school') {
-  return `Subject: ${subject}\nAudience level: ${level}\n\nProduce: ${SCHEMAS[kind]}`;
+export function buildPrompt({ subject, kind, level = 'high school', focus, explored, request, variant }: LessonRequest) {
+  const lines = [`Subject: ${subject}`, `Audience level: ${level}`];
+  if (focus) lines.push(`Focus: "${focus}". Everything you produce must be about this specific topic within the subject.`);
+  if (kind === 'problems' && explored?.length) {
+    lines.push(`The student just studied: ${explored.join('; ')}. At least half the problems must build directly on these.`);
+  }
+  if (kind === 'visual' && request) {
+    lines.push(`The student asked to see: "${request}". Model exactly that, choosing whichever shape fits the request regardless of the subject.`);
+  } else if (kind === 'visual' && variant) {
+    lines.push(`This is example number ${variant + 1}. Choose a DIFFERENT model from the most obvious one, still central to the topic.`);
+  }
+  return `${lines.join('\n')}\n\nProduce: ${SCHEMAS[kind]}`;
+}
+
+export function buildScopePrompt(subject: string, level = 'high school') {
+  return `A ${level} student typed this into a lesson generator: "${subject}"
+
+Decide whether it is "broad" (a whole subject, field or course, e.g. "physics", "organic chemistry", "multivariable calculus") or "specific" (one concept or skill, e.g. "chain rule", "SN2 reactions", "projectile motion").
+
+Produce a JSON object:
+{"scope": "broad" | "specific",
+ "overview": "a very brief 1-2 sentence overview",
+ "suggestions": ["6-8 specific topics inside it worth exploring, 1-4 words each"]}`;
+}
+
+export function buildSolvePrompt({ subject, level = 'high school', focus, question }: SolveRequest, hasImage: boolean) {
+  return `Subject: ${subject}${focus ? ` (${focus})` : ''}\nAudience level: ${level}
+${hasImage ? 'The attached image contains a problem the student wants solved.' : ''}${question ? `\nThe student says: "${question}"` : ''}
+
+Produce a JSON object:
+{"prompt": "the problem restated precisely as plain text",
+ "solution": "numbered step-by-step worked solution ending with the final answer",
+ "difficulty": "base" | "intro" | "core" | "edge",
+ "why": "the key idea this tests and the common mistake"}`;
 }
 
 export function buildExpandPrompt({ subject, topic, path = [], level = 'high school' }: ExpandRequest) {

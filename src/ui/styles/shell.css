@@ -1,0 +1,24 @@
+.shell { display: grid; grid-template-columns: 224px 1fr; height: 100vh; animation: bloom 0.4s var(--ease); }
+
+/* ---------- Sidebar ---------- */
+.sidebar { background: var(--lilac-50); border-right: 1px solid var(--line); padding: 20px 12px; display: flex; flex-direction: column; gap: 4px; }
+.sidebar button { display: flex; align-items: center; gap: 0.7rem; width: 100%; text-align: left; border: 1px solid transparent; background: none; border-radius: var(--radius-sm); padding: 0.6rem 0.75rem; }
+.sidebar button:hover { background: color-mix(in srgb, var(--white) 60%, transparent); border-color: transparent; }
+.sidebar .brand { font-weight: 800; font-size: 1.05rem; letter-spacing: -0.03em; margin-bottom: 18px; }
+.sidebar .brand svg { color: var(--violet); }
+.sidebar .nav.on { background: var(--white); color: var(--violet); font-weight: 600; box-shadow: var(--shadow); }
+.sidebar svg { width: 18px; height: 18px; flex: none; }
+.sidebar .label { flex: 1; }
+.sidebar .key { font-size: 0.68rem; color: var(--muted); border: 1px solid var(--line-strong); border-radius: 5px; padding: 0 5px; background: var(--white); }
+.sidebar .spacer { flex: 1; }
+.sidebar .hint { font-size: 0.76rem; color: var(--muted); padding: 0 0.75rem; }
+
+/* ---------- Content ---------- */
+.content { overflow: auto; padding: 26px 40px 120px; position: relative; }
+.lesson-head { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; padding-bottom: 18px; margin-bottom: 20px; border-bottom: 1px solid var(--line); min-height: 58px; }
+.lesson-head h1 { font-size: 1.55rem; text-transform: capitalize; }
+.lesson-head .sep { color: var(--line-strong); font-size: 1.3rem; }
+.focus-chip { display: inline-flex; align-items: center; gap: 0.5rem; background: var(--accent-soft); border: 1px solid var(--line-strong); border-radius: var(--pill); padding: 0.25rem 0.4rem 0.25rem 0.9rem; font-weight: 600; text-transform: capitalize; animation: bloom 0.3s var(--ease); }
+.focus-chip button { border: none; background: none; padding: 0 0.4rem; border-radius: 50%; color: var(--muted); }
+.lesson-head .updating { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: var(--muted); }
+.view { animation: rise 0.35s var(--ease); }

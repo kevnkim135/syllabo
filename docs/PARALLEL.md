@@ -13,11 +13,14 @@ parallel work safe.
 
 ## Per agent
 5. New workspace in Paradev (Cmd+N), one per task in TASKS.md. Setup script runs automatically.
-6. Start the agent with: "Read AGENTS.md and TASKS.md. You are Agent N. Do your task."
+6. Start the agent with: "Read AGENTS.md, TASKS.md and docs/CONTRACTS.md. You are Agent N (name).
+   Do your task, commit on your branch, and finish with the report AGENTS.md asks for."
+7. While they run: answer their questions, and try each workspace with `npm run dev` in its folder
+   (one at a time, since they share ports 5173 and 8787).
 
 ## Integrate
-7. `git switch -c integrate` in the main repo.
-8. `scripts/overlap.sh main` to see files touched by 2+ branches.
-9. `scripts/merge-agents.sh --test "<your test cmd>" branch-a branch-b branch-c`
+8. `git switch -c integrate` in the main repo.
+9. `scripts/overlap.sh main` to see files touched by 2+ branches.
+10. `scripts/merge-agents.sh --test "npm run typecheck && npm test && npm run build" branch-a branch-b branch-c`
    Merges one at a time; aborts cleanly on conflict or failing tests.
-10. When green: `git switch main && git merge integrate`.
+11. When green: `git switch main && git merge integrate`.

@@ -1,0 +1,31 @@
+/* Design tokens. The five palette colors are the only raw colors in the app; everything else derives from them. */
+:root {
+  --white: #ffffff;
+  --lilac-50: #f3eaff;
+  --lilac-200: #d5c2ff;
+  --violet: #8b6bd6;
+  --forest: #2f5d50;
+
+  --bg: var(--white);
+  --surface: var(--white);
+  --surface-2: var(--lilac-50);
+  --line: color-mix(in srgb, var(--lilac-200) 55%, var(--white));
+  --line-strong: var(--lilac-200);
+  --text: var(--forest);
+  --muted: color-mix(in srgb, var(--forest) 78%, var(--white));
+  --accent: var(--violet);
+  --accent-soft: color-mix(in srgb, var(--violet) 12%, var(--white));
+
+  --radius: 18px; /* bubbly rectangles */
+  --radius-sm: 12px;
+  --pill: 999px;
+  --shadow: 0 6px 24px color-mix(in srgb, var(--violet) 14%, transparent);
+  --shadow-lg: 0 14px 44px color-mix(in srgb, var(--violet) 20%, transparent);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --gap: 16px;
+
+  font: 14px/1.55 Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  color-scheme: light;
+}

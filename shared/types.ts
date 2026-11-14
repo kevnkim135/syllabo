@@ -11,6 +11,7 @@ export interface TimelineEvent {
   title: string;
   figure?: string;
   detail: string;
+  related?: string[]; // short related terms the reader can open (expand via POST /api/expand)
 }
 
 export interface TopicNode {
@@ -83,6 +84,27 @@ export interface LessonRequest {
   subject: string;
   kind: LessonKind;
   level?: string;
+  focus?: string; // specific topic inside the subject; when set, every kind is generated about it
+  explored?: string[]; // problems only: topics the student opened, so problems build on them
+  request?: string; // visual only: free-text ask, e.g. "benzene" or "graph x^2 - y^2"
+  variant?: number; // visual only: 0 = default example, 1, 2, ... = a different example each time
+}
+
+// ---- Broad subject vs specific topic (POST /api/scope) ----
+export interface ScopeInfo {
+  scope: 'broad' | 'specific';
+  overview: string; // 1-2 sentences
+  suggestions: string[]; // specific topics worth exploring inside it
+}
+
+// ---- Solve a student's own problem (POST /api/solve) ----
+export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const;
+export interface SolveRequest {
+  subject: string;
+  level?: string;
+  focus?: string;
+  question?: string; // typed or spoken
+  image?: { mediaType: (typeof IMAGE_TYPES)[number]; data: string }; // base64, no data: prefix
 }
 
 export interface LessonResponse<K extends LessonKind = LessonKind> {

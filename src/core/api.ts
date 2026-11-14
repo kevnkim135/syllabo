@@ -1,4 +1,4 @@
-import type { ExpandRequest, LessonKind, LessonRequest, LessonResponse, TopicDetail } from '../../shared/types';
+import type { ExpandRequest, LessonKind, LessonRequest, LessonResponse, Problem, ScopeInfo, SolveRequest, TopicDetail } from '../../shared/types';
 
 async function post<T>(url: string, req: unknown): Promise<T> {
   const res = await fetch(url, {
@@ -13,5 +13,6 @@ async function post<T>(url: string, req: unknown): Promise<T> {
 
 export const fetchLesson = <K extends LessonKind>(req: LessonRequest & { kind: K }) =>
   post<LessonResponse<K>>('/api/lesson', req);
-
 export const fetchExpand = (req: ExpandRequest) => post<TopicDetail>('/api/expand', req);
+export const fetchScope = (subject: string, level?: string) => post<ScopeInfo>('/api/scope', { subject, level });
+export const fetchSolve = (req: SolveRequest) => post<Problem>('/api/solve', req);

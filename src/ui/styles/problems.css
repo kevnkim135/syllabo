@@ -1,0 +1,24 @@
+/* Owner: problems agent */
+.problems { max-width: 880px; }
+.solve-bar { display: flex; align-items: center; gap: 0.4rem; border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 0.4rem 0.4rem 0.4rem 1.1rem; box-shadow: var(--shadow); margin-bottom: 0.5rem; background: var(--white); }
+.solve-bar:focus-within { border-color: var(--accent); }
+.solve-bar input[type='text'] { flex: 1; border: none; background: none; padding: 0.55rem 0; min-width: 0; }
+.solve-bar input[type='text']:focus-visible { outline: none; }
+.solve-bar .attach { border-radius: var(--pill); font-size: 0.85rem; cursor: pointer; border: 1px solid var(--line-strong); padding: 0.4rem 0.9rem; }
+.solve-bar .attach:hover { background: var(--surface-2); }
+.solve-bar .thumb { height: 38px; border-radius: 8px; border: 1px solid var(--line-strong); }
+.solve-hint { font-size: 0.8rem; margin-bottom: 1.25rem; }
+.filters { display: flex; gap: 0.35rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.filters button { border-radius: var(--pill); }
+.filters button.on { border-color: var(--accent); background: var(--accent-soft); }
+.problems article { margin-bottom: 0.85rem; animation: rise 0.3s var(--ease); }
+.problems article.mine { border-color: var(--accent); }
+.problems header { display: flex; gap: 0.6rem; align-items: center; margin-bottom: 0.5rem; }
+.num { font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+.prompt { font-size: 0.98rem; white-space: pre-wrap; }
+.badge { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 9px; border-radius: var(--pill); background: var(--surface-2); border: 1px solid var(--line-strong); }
+.badge.intro, .badge.base { color: var(--forest); }
+.badge.core { color: var(--violet); }
+.badge.edge, .badge.yours { color: var(--white); background: var(--violet); border-color: var(--violet); }
+.hint p { margin: 0.25rem 0 0.5rem; }
+.solution { white-space: pre-wrap; background: var(--surface-2); padding: 0.75rem 1rem; border-radius: var(--radius-sm); margin-top: 0.4rem; font-variant-numeric: tabular-nums; }

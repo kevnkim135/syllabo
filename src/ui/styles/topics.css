@@ -1,0 +1,33 @@
+/* Owner: topics agent */
+.hub { max-width: 620px; margin: 6vh auto 2.5rem; text-align: center; padding: 2rem 2.25rem; animation: bloom 0.45s var(--ease); }
+.hub h2 { font-size: 1.7rem; text-transform: capitalize; margin-bottom: 0.5rem; }
+.hub .ask { margin: 1.25rem 0 0; box-shadow: none; }
+.hub .ask input { font-size: 0.98rem; }
+.branches { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.6rem; max-width: 760px; margin: 0 auto 2.5rem; }
+.branches button { border-radius: var(--pill); padding: 0.5rem 1.1rem; box-shadow: var(--shadow); animation: bloom 0.45s var(--ease) backwards; }
+.branches button:hover { transform: translateY(-2px); }
+.browse { color: var(--muted); font-size: 0.85rem; text-align: center; margin-bottom: 1rem; }
+
+.topics-layout { display: grid; grid-template-columns: 360px 1fr; gap: var(--gap); align-items: start; }
+.tree { padding: 0.5rem 1.1rem; }
+.tree section { padding: 0.8rem 0; border-bottom: 1px solid var(--line); }
+.tree section:last-child { border-bottom: none; }
+.tree p { font-size: 0.85rem; margin: 0.2rem 0 0.5rem; }
+.node.top { border: none; background: none; padding: 0; font-weight: 700; font-size: 0.98rem; text-align: left; }
+.node.top:hover, .node.top.on { color: var(--accent); background: none; }
+.tree .chip { font-size: 0.8rem; }
+.detail { min-height: 340px; padding: 1.5rem 2rem; }
+.detail article { max-width: 760px; animation: rise 0.3s var(--ease); }
+.detail h2 { font-size: 1.4rem; margin-bottom: 0.75rem; }
+.detail ul { padding-left: 1.2rem; margin: 0; }
+.detail li { margin: 0.3rem 0; }
+.detail-actions { margin-top: 1.5rem; }
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; margin-bottom: 1rem; font-size: 0.85rem; }
+.crumbs button { background: none; border: none; padding: 0.1rem 0.2rem; color: var(--muted); }
+.crumbs span:last-child button { color: var(--text); font-weight: 600; }
+.crumbs button:hover { color: var(--accent); background: none; }
+.callout { background: var(--surface-2); border-left: 3px solid var(--accent); padding: 0.75rem 1rem; border-radius: var(--radius-sm); white-space: pre-wrap; }
+.deeper { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 0.6rem; }
+.card-btn { display: flex; flex-direction: column; gap: 0.25rem; text-align: left; padding: 0.8rem 1rem; border-radius: var(--radius-sm); }
+.card-btn .muted { font-size: 0.82rem; }
+@media (max-width: 1180px) { .topics-layout { grid-template-columns: 1fr; } }

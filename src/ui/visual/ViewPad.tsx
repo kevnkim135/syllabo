@@ -14,6 +14,7 @@ const VIEWS: [string, Command][] = [
   ['Front', { type: 'view', view: 'front' }],
   ['Side', { type: 'view', view: 'side' }],
   ['Reset', { type: 'reset' }],
+  ['New example', { type: 'newExample' }],
 ];
 
 export function ViewPad() {
