@@ -1,5 +1,5 @@
 /* Owner: history agent. A living timeline down the centre of the page. */
-.history { position: relative; margin: -20px -40px -120px; padding: 20px 40px 150px; min-height: calc(100vh - 200px); overflow-x: visible; overflow-y: clip; }
+.history { position: relative; margin: -20px -40px -48px; padding: 20px 40px 150px; min-height: calc(100vh - 200px); overflow-x: visible; overflow-y: clip; }
 
 /* ---------- Airflow canvas: sticky, one viewport tall, behind everything ---------- */
 .h-air { position: sticky; top: 0; height: 0; margin: 0 -40px; z-index: 0; pointer-events: none; }
