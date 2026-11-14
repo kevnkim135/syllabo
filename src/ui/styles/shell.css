@@ -14,7 +14,7 @@
 .sidebar .hint { font-size: 0.76rem; color: var(--muted); padding: 0 0.75rem; }
 
 /* ---------- Content ---------- */
-.content { overflow: auto; padding: 26px 40px 120px; position: relative; }
+.content { overflow: auto; padding: 26px 40px 48px; position: relative; }
 .lesson-head { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; padding-bottom: 18px; margin-bottom: 20px; border-bottom: 1px solid var(--line); min-height: 58px; }
 .lesson-head h1 { font-size: 1.55rem; text-transform: capitalize; }
 .lesson-head .sep { color: var(--line-strong); font-size: 1.3rem; }

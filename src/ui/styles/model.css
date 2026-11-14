@@ -1,14 +1,83 @@
 /* Owner: model agent */
-.stage-layout { display: grid; grid-template-columns: 1fr 290px; gap: var(--gap); }
-.stage { position: relative; height: calc(100vh - 150px); min-height: 440px; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); box-shadow: var(--shadow); }
-.stage-title { position: absolute; top: 0.9rem; left: 1rem; font-weight: 600; pointer-events: none; background: color-mix(in srgb, var(--white) 85%, transparent); backdrop-filter: blur(8px); padding: 0.35rem 0.85rem; border-radius: var(--pill); border: 1px solid var(--line); }
-.viewpad { position: absolute; left: 1rem; bottom: 1rem; display: flex; gap: 0.75rem; align-items: end; }
-.viewpad .pad { display: grid; grid-template-columns: repeat(3, 36px); gap: 4px; }
-.viewpad button { background: color-mix(in srgb, var(--white) 80%, transparent); backdrop-filter: blur(8px); padding: 0.3rem; min-width: 36px; }
-.viewpad .views { display: flex; gap: 4px; }
-.viewpad .views button { padding: 0.3rem 0.7rem; font-size: 0.8rem; }
-.guide { font-size: 0.88rem; align-self: start; }
+.stage-layout { display: grid; grid-template-columns: minmax(0, 1fr) 272px; gap: var(--gap); }
+.stage {
+  position: relative; height: calc(100vh - 150px); min-height: 460px; border-radius: var(--radius); overflow: hidden;
+  border: 1px solid var(--line); box-shadow: var(--shadow);
+  background: radial-gradient(circle at 50% 42%, var(--white) 0%, var(--lilac-50) 72%, color-mix(in srgb, var(--lilac-200) 38%, var(--lilac-50)) 100%);
+  --glass: color-mix(in srgb, var(--white) 62%, transparent);
+  --hairline: color-mix(in srgb, var(--forest) 12%, transparent);
+  --glass-shadow: 0 10px 34px color-mix(in srgb, var(--violet) 18%, transparent), inset 0 1px 0 color-mix(in srgb, var(--white) 85%, transparent);
+  --spring: cubic-bezier(0.3, 1.36, 0.5, 1);
+}
+.stage canvas { transition: opacity 0.5s var(--ease), filter 0.5s var(--ease); touch-action: none; }
+.stage.busy canvas { opacity: 0.55; filter: saturate(0.6); }
+
+/* Floating chips share one glass material. */
+.stage-title, .stage-status, .controlbar, .ask.stage-ask {
+  background: var(--glass); border: 1px solid var(--hairline); box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: blur(22px) saturate(1.7); backdrop-filter: blur(22px) saturate(1.7);
+}
+.stage-title { position: absolute; top: 14px; left: 14px; max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; pointer-events: none; padding: 0.35rem 0.9rem; border-radius: var(--pill); animation: rise 0.5s var(--ease); }
+.stage-status { position: absolute; top: 14px; right: 14px; max-width: 46%; display: flex; align-items: center; gap: 0.55rem; font-size: 0.85rem; color: var(--muted); padding: 0.35rem 0.9rem; border-radius: var(--pill); animation: rise 0.35s var(--ease); }
+.stage-status { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- Control bar: a slim column of icons that springs open into labelled controls ---------- */
+.controlbar {
+  --cell: 34px; --pad: 6px; --wide: 232px;
+  position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+  width: calc(var(--cell) + var(--pad) * 2 + 2px); padding: var(--pad);
+  display: flex; flex-direction: column; gap: 2px; overflow: hidden; border-radius: var(--radius);
+  font-size: 0.84rem; user-select: none;
+  transition: width 0.55s var(--spring), box-shadow 0.3s var(--ease);
+  animation: bloom 0.5s var(--ease);
+}
+.controlbar:hover, .controlbar:focus-within, .controlbar.open { width: var(--wide); }
+.controlbar hr { border: none; height: 1px; background: var(--hairline); margin: 3px 6px; width: calc(var(--wide) - var(--pad) * 2 - 14px); flex: none; }
+.controlbar .row {
+  display: flex; align-items: center; gap: 8px; flex: none;
+  width: calc(var(--wide) - var(--pad) * 2 - 2px); height: var(--cell); padding: 0 6px 0 0;
+  border: none; background: none; border-radius: var(--radius-sm); text-align: left; white-space: nowrap;
+}
+.controlbar .ico { width: var(--cell); height: var(--cell); display: grid; place-items: center; flex: none; color: var(--forest); }
+.controlbar svg { width: 17px; height: 17px; display: block; }
+.controlbar .name { flex: 1; font-weight: 500; }
+.controlbar .name, .controlbar .segs, .controlbar .hint { opacity: 0; transform: translateX(-6px); transition: opacity 0.2s var(--ease), transform 0.45s var(--spring); }
+.controlbar:hover :is(.name, .segs, .hint), .controlbar:focus-within :is(.name, .segs, .hint), .controlbar.open :is(.name, .segs, .hint) { opacity: 1; transform: none; transition-delay: 0.06s; }
+.controlbar .hint { font: inherit; font-size: 0.7rem; color: var(--muted); border: 1px solid var(--hairline); border-radius: 6px; padding: 0 6px; line-height: 1.5; }
+.controlbar .head .hint { border: none; padding: 0 2px; }
+.controlbar.open .head .ico { color: var(--violet); }
+
+.controlbar button { transition: background 0.18s, color 0.18s, transform 0.25s var(--spring); }
+.controlbar button.action:hover { background: color-mix(in srgb, var(--violet) 12%, transparent); }
+.controlbar button.action:active { transform: scale(0.98); }
+.controlbar .segs { display: flex; gap: 2px; padding: 2px; border-radius: 10px; background: color-mix(in srgb, var(--forest) 7%, transparent); }
+.controlbar .seg { width: 30px; height: 26px; padding: 0; display: grid; place-items: center; border: none; border-radius: 8px; background: none; color: var(--forest); }
+.controlbar .seg.text { width: auto; padding: 0 9px; font-size: 0.78rem; text-transform: capitalize; }
+.controlbar .seg:hover { background: var(--white); box-shadow: 0 1px 3px color-mix(in srgb, var(--forest) 18%, transparent); }
+.controlbar .seg:active { transform: scale(0.9); color: var(--violet); }
+.controlbar .seg svg { width: 15px; height: 15px; }
+.controlbar button:focus-visible { outline-offset: -2px; }
+
+/* ---------- Ask for a model ---------- */
+.ask.stage-ask {
+  position: absolute; left: 50%; bottom: 16px; width: min(400px, calc(100% - 120px)); transform: translateX(-50%);
+  padding: 4px 4px 4px 1.05rem; gap: 0.3rem;
+  transition: width 0.5s var(--spring), box-shadow 0.25s, border-color 0.25s, background 0.25s;
+  animation: stage-ask-in 0.55s var(--ease);
+}
+.ask.stage-ask:focus-within { width: min(480px, calc(100% - 120px)); background: color-mix(in srgb, var(--white) 86%, transparent); border-color: var(--accent); }
+.ask.stage-ask input { font-size: 0.92rem; padding: 0.4rem 0; }
+.ask.stage-ask .go { width: 32px; height: 32px; font-size: 0.95rem; transition: opacity 0.2s, transform 0.3s var(--spring), background 0.18s; }
+.ask.stage-ask .go:disabled { opacity: 0.35; transform: scale(0.86); cursor: default; }
+.ask.stage-ask .go .spinner { border-color: color-mix(in srgb, var(--white) 45%, transparent); border-top-color: var(--white); }
+@keyframes stage-ask-in { from { opacity: 0; transform: translateX(-50%) translateY(10px) scale(0.985); } }
+
+/* ---------- Guide ---------- */
+.guide { font-size: 0.86rem; align-self: start; animation: rise 0.45s var(--ease) 0.08s backwards; }
 .guide h3:first-child { margin-top: 0; }
-.guide ol, .guide ul { padding-left: 1.1rem; margin: 0; }
-.guide li { margin: 0.3rem 0; }
+.guide p { margin: 0 0 0.6rem; font-size: 0.8rem; }
+.guide dl { margin: 0; display: grid; gap: 0.55rem; }
+.guide dt { display: inline-block; font-size: 0.74rem; font-weight: 600; color: var(--violet); background: var(--accent-soft); border-radius: var(--pill); padding: 0.05rem 0.6rem; margin-bottom: 0.15rem; }
+.guide dd { margin: 0; color: var(--muted); line-height: 1.45; }
+
 @media (max-width: 1180px) { .stage-layout { grid-template-columns: 1fr; } }

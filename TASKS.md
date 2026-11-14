@@ -117,3 +117,5 @@ Agents own whole files so branches do not overlap.
 ---
 
 ## Requests (agents append here; format: `to <owner>: <file> - <what you need>`)
+to integrator (shared/types.ts, server/prompts.ts, server/validate.ts, server/fixtures.ts): add optional `topic?: string` to `Problem` (the explored topic it builds on, copied verbatim from `explored`) and ask the model to fill it. Agent 5 currently links problems to explored topics by matching topic names in the prompt/why text (`src/ui/panels/problems/branches.ts`); an explicit field would make the branches exact.
+  - DONE by integrator: `Problem.topic` added; server validates it against `explored`; branches.ts prefers it.

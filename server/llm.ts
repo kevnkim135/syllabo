@@ -40,7 +40,7 @@ function cached<T>(key: string, make: () => Promise<T | undefined>): Promise<T |
 export function generateLesson<K extends LessonKind>(req: LessonRequest & { kind: K }): Promise<LessonMap[K] | undefined> {
   if (usingMock()) return mock(fixture(req.kind, req.subject, req));
   const key = keyOf('lesson', req.kind, req.level, req.subject, req.focus, req.request, req.variant, req.explored?.join(';'));
-  return cached(key, () => ask(buildPrompt(req), (raw) => validate(req.kind, raw), `${req.kind} for "${req.subject}"`));
+  return cached(key, () => ask(buildPrompt(req), (raw) => validate(req.kind, raw, req.explored), `${req.kind} for "${req.subject}"`));
 }
 
 /** Click-to-expand deeper explanation for one topic. */

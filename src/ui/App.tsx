@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { VisualSpec } from '../../shared/types';
 import { isTyping } from '../core/input/keyboard';
 import { lesson, SECTIONS, useLesson } from '../core/lesson';
@@ -33,6 +33,12 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [inLesson]);
 
+  // Each section opens at its top, not at the previous section's scroll position.
+  const contentRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0 });
+  }, [section, s.subject, s.focus]);
+
   const has = data[section] !== undefined;
   const showStage = inLesson && section === 'visual' && !!data.visual;
 
@@ -42,7 +48,7 @@ export function App() {
 
       <div className="shell" hidden={!inLesson}>
         <Sidebar />
-        <main className="content">
+        <main className="content" ref={contentRef}>
           <header className="lesson-head">
             <h1>{s.subject}</h1>
             {s.focus && (
