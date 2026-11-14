@@ -1,0 +1,19 @@
+# deps & build
+node_modules/
+dist/
+*.tsbuildinfo
+
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# paradev / superset personal config
+.superset/config.local.json
+
+# editors & OS
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.log

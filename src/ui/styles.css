@@ -1,0 +1,49 @@
+:root {
+  --bg: #0a0d18;
+  --panel: #131829;
+  --text: #e6e9f5;
+  --muted: #8a93b2;
+  --accent: #6c8cff;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, input, select { font: inherit; color: inherit; background: var(--panel); border: 1px solid #2a3150; border-radius: 8px; padding: 0.5rem 0.8rem; }
+button { cursor: pointer; }
+button:hover { border-color: var(--accent); }
+
+.app { max-width: 1200px; margin: 0 auto; padding: 1rem 1.5rem 6rem; }
+header h1 { margin: 0 0 0.75rem; font-size: 1.4rem; }
+header form { display: flex; gap: 0.5rem; }
+header input { flex: 1; }
+
+.tabs { display: flex; gap: 0.4rem; margin: 1rem 0; }
+.tabs button.on { background: var(--accent); border-color: var(--accent); }
+.muted { color: var(--muted); }
+.error { color: #ff7a7a; }
+
+.stage { position: relative; height: 70vh; border-radius: 12px; overflow: hidden; }
+.stage-title { position: absolute; top: 0.75rem; left: 1rem; font-weight: 600; pointer-events: none; }
+.label { font-size: 12px; background: #000a; padding: 1px 6px; border-radius: 4px; white-space: nowrap; pointer-events: none; }
+
+.timeline { list-style: none; padding: 0; border-left: 2px solid #2a3150; }
+.timeline li { display: flex; gap: 1rem; padding: 0.5rem 0 0.5rem 1rem; }
+.timeline .year { min-width: 5rem; color: var(--accent); font-weight: 600; }
+.timeline p { margin: 0.25rem 0 0; }
+
+.topics, .topics ul { list-style: none; padding-left: 1rem; }
+.topics li { margin: 0.3rem 0; }
+
+.problems article { background: var(--panel); border-radius: 10px; padding: 0.8rem 1rem; margin-bottom: 0.75rem; }
+.problems header { display: flex; gap: 0.6rem; align-items: center; }
+.badge { font-size: 0.75rem; padding: 2px 8px; border-radius: 999px; background: #2a3150; }
+.badge.edge { background: #6b3a12; }
+.solution { white-space: pre-wrap; }
+
+.inputs { position: fixed; right: 1rem; bottom: 1rem; width: 280px; background: var(--panel); border: 1px solid #2a3150; border-radius: 12px; padding: 0.75rem; font-size: 0.85rem; }
+.inputs video { width: 100%; border-radius: 8px; transform: scaleX(-1); margin-bottom: 0.5rem; }
+.inputs video.hidden { display: none; }
+.inputs .row { display: flex; gap: 0.4rem; }
+.inputs .row button { flex: 1; }
