@@ -5,12 +5,13 @@
 // automatically and reopen without generating anything again.
 import { useSyncExternalStore } from 'react';
 import type { LessonKind, LessonMap, Problem, ScopeInfo, VisualSpec } from '../../shared/types';
-import { fetchLesson, fetchScope } from './api';
+import { fetchLesson, fetchMolecule, fetchReact, fetchScope } from './api';
 import { commands } from './commands';
-import { library, lessonTitle, newId, type SavedLesson } from './library';
+import { library, lessonTitle, newId, type SandboxItem, type SandboxReaction, type SavedLesson } from './library';
 
 export type Section = LessonKind;
-export const SECTIONS: readonly Section[] = ['visual', 'timeline', 'topics', 'problems'];
+// Sidebar order AND load priority: the topic map first, then problems, the model, history.
+export const SECTIONS: readonly Section[] = ['topics', 'problems', 'visual', 'timeline'];
 type PerKind<T> = Partial<Record<LessonKind, T>>;
 export type View = 'home' | 'lesson' | 'library';
 
@@ -32,10 +33,23 @@ export interface LessonState {
   modelIndex: number;
   solved: Problem[]; // the student's own problems, newest first
   asked: { id: number; question: string } | null; // pending spoken/typed problem for the problems section
+  stageMode: 'models' | 'sandbox'; // the model gallery, or the chemistry sandbox
+  sandbox: Sandbox;
   savedAt: number | null; // set once saved; later changes are saved automatically
   folderId: string | null;
   createdAt: number;
 }
+
+export interface Sandbox {
+  items: (SandboxItem & { dying?: [number, number, number] })[]; // dying: reactants shrinking toward this point
+  selected: string[];
+  reaction: SandboxReaction | null;
+  busy: null | 'add' | 'react';
+  error: string | null;
+}
+export type MoveDirection = 'left' | 'right' | 'up' | 'down' | 'closer' | 'farther' | 'together' | 'apart';
+
+const emptySandbox = (): Sandbox => ({ items: [], selected: [], reaction: null, busy: null, error: null });
 
 export interface Workspace {
   view: View;
@@ -62,6 +76,8 @@ const blank = (level: string): LessonState => ({
   modelIndex: 0,
   solved: [],
   asked: null,
+  stageMode: 'models',
+  sandbox: emptySandbox(),
   savedAt: null,
   folderId: null,
   createdAt: 0,
@@ -114,6 +130,7 @@ function snapshot(s: LessonState): SavedLesson {
     explored: s.explored,
     solved: s.solved,
     folderId: s.folderId,
+    sandbox: { items: s.sandbox.items.filter((i) => !i.dying).map(({ dying: _d, ...i }) => i), reaction: s.sandbox.reaction },
     createdAt: s.createdAt,
     updatedAt: Date.now(),
   };
@@ -301,6 +318,7 @@ export const lesson = {
       data: { ...saved.data, ...(models.length ? { visual: models[modelIndex] } : {}) },
       models,
       modelIndex,
+      sandbox: { ...emptySandbox(), items: saved.sandbox?.items ?? [], reaction: saved.sandbox?.reaction ?? null },
       savedAt: saved.updatedAt,
     });
     order = [...order, id];
@@ -345,6 +363,136 @@ export const lesson = {
     });
   },
 
+  // ---- chemistry sandbox ----
+  setStageMode(stageMode: 'models' | 'sandbox') {
+    withActive((s) => {
+      ws = { ...ws, view: 'lesson' };
+      update(s.id, { stageMode, section: 'visual' });
+    });
+  },
+  /** Add molecules by name ("water", "benzene") to the shared space. */
+  sandboxAdd(name: string, count = 1) {
+    withActive((s) => {
+      const id = s.id;
+      ws = { ...ws, view: 'lesson' };
+      update(id, (x) => ({ stageMode: 'sandbox', section: 'visual', sandbox: { ...x.sandbox, busy: 'add', error: null } }));
+      fetchMolecule(name.trim())
+        .then((molecule) =>
+          update(id, (x) => {
+            const items = [...x.sandbox.items];
+            for (let k = 0; k < Math.max(1, Math.min(count, 6)); k++) {
+              const item = { id: newId(), name: tidyName(molecule.title, name), molecule, pos: freeSlot(items), scale: 1 };
+              items.push(item);
+            }
+            // adding never changes the selection: selecting stays a deliberate act
+            return { sandbox: { ...x.sandbox, items, busy: null } };
+          }),
+        )
+        .catch((e: Error) => update(id, (x) => ({ sandbox: { ...x.sandbox, busy: null, error: `Could not build ${name}: ${e.message}` } })));
+    });
+  },
+  /** Select sandbox items: replace the selection, toggle items in it, or add to it. */
+  sandboxSelect(ids: string[], how: 'set' | 'toggle' | 'add' = 'set') {
+    withActive((s) => {
+      const cur = s.sandbox.selected;
+      const selected = how === 'set' ? ids : how === 'add' ? [...new Set([...cur, ...ids])] : cur.filter((i) => !ids.includes(i)).concat(ids.filter((i) => !cur.includes(i)));
+      update(s.id, { sandbox: { ...s.sandbox, selected } });
+    });
+  },
+  /** Move items by a world-space offset (mouse and hand drags). */
+  sandboxMove(ids: string[], d: [number, number, number]) {
+    withActive((s) => {
+      const items = s.sandbox.items.map((i) => (ids.includes(i.id) ? { ...i, pos: clampPos([i.pos[0] + d[0], i.pos[1] + d[1], i.pos[2] + d[2]]) } : i));
+      update(s.id, { sandbox: { ...s.sandbox, items } });
+    });
+  },
+  /** Move items in a named direction (voice). "together" / "apart" are relative to the other items. */
+  sandboxNudge(ids: string[], dir: MoveDirection, amount = 1.5) {
+    withActive((s) => {
+      const all = s.sandbox.items;
+      const centre = centroid(all.map((i) => i.pos));
+      const step: Record<Exclude<MoveDirection, 'together' | 'apart'>, [number, number, number]> = {
+        left: [-amount, 0, 0], right: [amount, 0, 0], up: [0, amount, 0], down: [0, -amount, 0], closer: [0, 0, amount], farther: [0, 0, -amount],
+      };
+      const items = all.map((i) => {
+        if (!ids.includes(i.id)) return i;
+        if (dir === 'together' || dir === 'apart') {
+          const k = dir === 'together' ? 0.72 : 1.5;
+          return { ...i, pos: clampPos([centre[0] + (i.pos[0] - centre[0]) * k, centre[1] + (i.pos[1] - centre[1]) * k, centre[2] + (i.pos[2] - centre[2]) * k]) };
+        }
+        const d = step[dir];
+        return { ...i, pos: clampPos([i.pos[0] + d[0], i.pos[1] + d[1], i.pos[2] + d[2]]) };
+      });
+      update(s.id, { sandbox: { ...s.sandbox, items } });
+    });
+  },
+  sandboxScale(ids: string[], factor: number) {
+    withActive((s) => {
+      const items = s.sandbox.items.map((i) => (ids.includes(i.id) ? { ...i, scale: Math.min(4, Math.max(0.3, i.scale * factor)) } : i));
+      update(s.id, { sandbox: { ...s.sandbox, items } });
+    });
+  },
+  sandboxRemove(ids: string[]) {
+    withActive((s) =>
+      update(s.id, { sandbox: { ...s.sandbox, items: s.sandbox.items.filter((i) => !ids.includes(i.id)), selected: s.sandbox.selected.filter((i) => !ids.includes(i)) } }),
+    );
+  },
+  sandboxClear() {
+    withActive((s) => update(s.id, { sandbox: emptySandbox() }));
+  },
+  /**
+   * Ask what happens when the selected molecules (or all of them) meet under a condition. If they react,
+   * the reactants shrink together and the products bloom out where they met.
+   */
+  sandboxReact(condition = '') {
+    withActive((s) => {
+      const id = s.id;
+      const pool = s.sandbox.items.filter((i) => !i.dying);
+      // two or more selected: just those; otherwise everything in the space
+      const picked = pool.filter((i) => s.sandbox.selected.includes(i.id));
+      const chosen = picked.length >= 2 ? picked : pool;
+      if (!chosen.length) return update(id, { sandbox: { ...s.sandbox, error: 'Add some molecules first, for example "add methane and oxygen".' } });
+      const counts = new Map<string, number>();
+      for (const i of chosen) counts.set(i.name, (counts.get(i.name) ?? 0) + 1);
+      update(id, (x) => ({ sandbox: { ...x.sandbox, busy: 'react', error: null } }));
+      fetchReact({ reactants: [...counts].map(([name, count]) => ({ name, count })), condition: condition.trim() || undefined, level: s.level })
+        .then((result) => {
+          const reaction: SandboxReaction = { result, condition: condition.trim(), reactants: [...counts].map(([n, c]) => (c > 1 ? `${c} ${n}` : n)) };
+          if (!result.reacts) return update(id, (x) => ({ sandbox: { ...x.sandbox, busy: null, reaction } }));
+          const meet = centroid(chosen.map((i) => i.pos));
+          const gone = new Set(chosen.map((i) => i.id));
+          update(id, (x) => ({ sandbox: { ...x.sandbox, busy: null, reaction, selected: [], items: x.sandbox.items.map((i) => (gone.has(i.id) ? { ...i, dying: meet } : i)) } }));
+          setTimeout(() => {
+            update(id, (x) => {
+              const items = x.sandbox.items.filter((i) => !gone.has(i.id));
+              const total = result.products.reduce((n, p) => n + p.count, 0);
+              let k = 0;
+              for (const p of result.products) {
+                for (let c = 0; c < p.count; c++, k++) {
+                  const a = (k / Math.max(total, 1)) * Math.PI * 2;
+                  const r = total > 1 ? 2.6 + total * 0.4 : 0; // products fan out around where the reactants met
+                  const item = { id: newId(), name: p.name, molecule: p.molecule, pos: clampPos([meet[0] + Math.cos(a) * r, meet[1] + Math.sin(a) * r * 0.35, meet[2] + Math.sin(a) * r * 0.9]), scale: 1 };
+                  items.push(item);
+                }
+              }
+              return { sandbox: { ...x.sandbox, items, selected: [] } };
+            });
+          }, 700);
+        })
+        .catch((e: Error) => update(id, (x) => ({ sandbox: { ...x.sandbox, busy: null, error: `Could not run the reaction: ${e.message}` } })));
+    });
+  },
+  /** Items named like `target` ("water", "the methane", "it", "selected", "all"). */
+  sandboxFind(target: string): string[] {
+    const s = active();
+    const items = s.sandbox.items.filter((i) => !i.dying);
+    const t = target.toLowerCase().replace(/^(?:the|a|an|my)\s+/, '').replace(/\s+molecules?$/, '').trim();
+    if (!t || /^(?:it|them|these|those|this|that|selected|selection|the selection)$/.test(t)) return s.sandbox.selected.length ? s.sandbox.selected : items.slice(-1).map((i) => i.id);
+    if (/^(?:all|everything|every(?:thing| molecule)|both)$/.test(t)) return items.map((i) => i.id);
+    const words = t.split(/\s+/).filter((w) => w.length > 1);
+    return items.filter((i) => words.some((w) => i.name.toLowerCase().includes(w) || i.molecule.title.toLowerCase().includes(w))).map((i) => i.id);
+  },
+
   // ---- problems ----
   /** Queue a spoken or typed problem; the problems section solves it. */
   ask(question: string) {
@@ -357,6 +505,26 @@ export const lesson = {
     if (id && sessions.has(id)) update(id, (s) => ({ solved: [p, ...s.solved] }));
   },
 };
+
+// ---- sandbox helpers ----
+const centroid = (ps: [number, number, number][]): [number, number, number] =>
+  ps.length ? [0, 1, 2].map((k) => ps.reduce((a, p) => a + p[k], 0) / ps.length) as [number, number, number] : [0, 0, 0];
+const clampPos = (p: [number, number, number]): [number, number, number] => p.map((v) => Math.max(-9, Math.min(9, v))) as [number, number, number];
+/** "Water (H2O)" or "Methane (CH4): tetrahedral" -> "Water" / "Methane"; falls back to what was asked for. */
+const tidyName = (title: string, asked: string) => {
+  const name = title.split(/[(:,]/)[0].trim();
+  return name && name.length <= 40 ? name : asked.replace(/^./, (c) => c.toUpperCase());
+};
+/** Next free spot: a widening spiral on the bench, about 3 units apart. */
+function freeSlot(items: { pos: [number, number, number] }[]): [number, number, number] {
+  for (let k = 0; k < 60; k++) {
+    const a = k * 2.4;
+    const r = k === 0 ? 0 : 1.6 + Math.sqrt(k) * 1.6;
+    const p: [number, number, number] = [Math.cos(a) * r, 0, Math.sin(a) * r * 0.6];
+    if (items.every((i) => Math.hypot(i.pos[0] - p[0], i.pos[2] - p[2]) > 2.6)) return p;
+  }
+  return [0, 2, 0];
+}
 
 // Navigation and content commands from gestures, voice, keys and buttons.
 commands.on((cmd) => {

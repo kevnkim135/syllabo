@@ -2,7 +2,20 @@
 // generating anything again. Read with useLibrary(), change with `library.*`. Lesson snapshots are
 // written by core/lesson.ts whenever a saved lesson changes.
 import { useSyncExternalStore } from 'react';
-import type { LessonKind, LessonMap, Problem, ScopeInfo, VisualSpec } from '../../shared/types';
+import type { LessonKind, LessonMap, MoleculeSpec, Problem, ReactionResult, ScopeInfo, VisualSpec } from '../../shared/types';
+
+export interface SandboxItem {
+  id: string;
+  name: string;
+  molecule: MoleculeSpec;
+  pos: [number, number, number];
+  scale: number;
+}
+export interface SandboxReaction {
+  result: ReactionResult;
+  condition: string;
+  reactants: string[];
+}
 
 export interface Folder {
   id: string;
@@ -23,6 +36,7 @@ export interface SavedLesson {
   explored: string[];
   solved: Problem[];
   folderId: string | null;
+  sandbox?: { items: SandboxItem[]; reaction: SandboxReaction | null };
   createdAt: number;
   updatedAt: number;
 }

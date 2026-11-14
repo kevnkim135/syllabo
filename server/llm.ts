@@ -1,9 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { ExpandRequest, IntentRequest, IntentResult, LessonKind, LessonMap, LessonRequest, Problem, ScopeInfo, SolveRequest, TopicDetail } from '../shared/types';
+import type { ExpandRequest, IntentRequest, IntentResult, LessonKind, LessonMap, LessonRequest, MoleculeSpec, Problem, ReactionResult, ReactRequest, ScopeInfo, SolveRequest, TopicDetail } from '../shared/types';
 import { ruleIntent } from '../shared/intentRules';
-import { buildExpandPrompt, buildIntentPrompt, buildPrompt, buildScopePrompt, buildSolvePrompt, SYSTEM } from './prompts';
-import { expandFixture, fixture, scopeFixture, solveFixture } from './fixtures';
-import { validate, validateDetail, validateIntent, validateProblem, validateScope } from './validate';
+import { buildExpandPrompt, buildIntentPrompt, buildMoleculePrompt, buildPrompt, buildReactPrompt, buildScopePrompt, buildSolvePrompt, SYSTEM } from './prompts';
+import { expandFixture, fixture, moleculeFixture, reactFixture, scopeFixture, solveFixture } from './fixtures';
+import { validate, validateDetail, validateIntent, validateMolecule, validateProblem, validateReaction, validateScope } from './validate';
 
 let client: Anthropic | null = null;
 
@@ -68,6 +68,19 @@ export function solveProblem(req: SolveRequest): Promise<Problem | undefined> {
       ]
     : [{ type: 'text', text }];
   return ask(content, validateProblem, 'solve');
+}
+
+/** One molecule by name, for the chemistry sandbox. Cached. */
+export function makeMolecule(name: string): Promise<MoleculeSpec | undefined> {
+  if (usingMock()) return mock(moleculeFixture(name));
+  return cached(keyOf('molecule', name), () => ask(buildMoleculePrompt(name), validateMolecule, `molecule "${name}"`));
+}
+
+/** What happens when sandbox molecules meet under a condition. Cached by reactants and condition. */
+export function react(req: ReactRequest): Promise<ReactionResult | undefined> {
+  if (usingMock()) return mock(reactFixture(req));
+  const key = keyOf('react', req.level, req.condition, ...req.reactants.map((r) => `${r.count ?? 1}x${r.name}`).sort());
+  return cached(key, () => ask(buildReactPrompt(req), validateReaction, 'reaction'));
 }
 
 /**

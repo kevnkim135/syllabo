@@ -51,12 +51,13 @@ tests/                 unit tests for gesture math and voice parsing
 Every input (mouse, keys, gesture, voice) goes through `src/core/commands.ts`, so a new gesture works everywhere automatically.
 
 ## Controls
-- **Navigate:** sidebar, keys 1-4 (0 = home), or say "go to history", "open the topic map", "go home"
+- **Navigate:** sidebar (Topic map, Problems, Interactive model, History; loaded in that order), keys 1-4 (0 = home), or say "go to history", "open the topic map", "go home"
 - **Talk naturally:** full sentences are understood in the context of the current lesson, e.g. "let's dive into SN2 reactions" (narrows this lesson), "ok, let's learn about photosynthesis instead" (opens a new lesson), "save this to my chemistry folder", "go back to organic chemistry", "show me benzene", "solve 2x + 3 = 7". Uses Claude when a key is set, built-in rules otherwise
 - **Lessons:** several lessons stay open as tabs; Save keeps one in your Library (with folders) and it then saves itself as you go. Saved lessons reopen instantly, with every model, note and solved problem, without generating anything again (stored in this browser)
+- **Sandbox (Interactive model → Sandbox):** add molecules to one shared space ("add methane and two oxygens"), move them by voice, mouse or hand, and "react them with a spark": Claude predicts the products and they replace the reactants, with the balanced equation
 - **Models:** every model you build stays in the lesson; flip through them with an open-hand swipe left / right, `[` and `]`, the arrows on the stage, or "next model"
 - **Model camera:** mouse drag and scroll, arrow keys, + / -, T / F / S views, R reset, the control bar on the stage
-- **Gestures:** three-finger pinch held = zoom in, three fingers spread (ring and pinky folded) = zoom out, pinch with one hand + draw circles with the other index finger = rotate about that circle's axis, twirl a pointing finger = new example, swipe left / right = next / previous model, both fists = home
+- **Gestures:** in the sandbox, point at a molecule and pinch quickly to select it, pinch and hold to drag (toward and away from you too), pinch with both hands and spread to resize. Everywhere: three-finger pinch held = zoom in, three fingers spread (ring and pinky folded) = zoom out, pinch with one hand + draw circles with the other index finger = rotate about that circle's axis, twirl a pointing finger = new example, swipe left / right = next / previous model, both fists = home
 
 ## Building in parallel
 `AGENTS.md`, `TASKS.md` and `.superset/` are set up for running several coding agents at once in Paradev, one worktree per task. See `docs/PARALLEL.md`.

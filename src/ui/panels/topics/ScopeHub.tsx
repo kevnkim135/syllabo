@@ -1,3 +1,4 @@
+import { DeltaField } from '../../home/DeltaField';
 import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { lesson, useLesson } from '../../../core/lesson';
 
@@ -75,6 +76,7 @@ export function ScopeHub() {
 
   return (
     <div className="hub" ref={wrap}>
+      <DeltaField clearCenter={false} gap={64} faint={0.55} className="hub-field" />
       <svg className="hub-links" width={box.w} height={box.h} aria-hidden>
         {links.map((d, i) => d && <path key={i} d={d} pathLength={1} style={{ animationDelay: `${0.18 + i * 0.07}s` }} />)}
       </svg>

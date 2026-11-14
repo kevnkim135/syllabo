@@ -2,48 +2,69 @@ import { useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import type * as THREE from 'three';
 import type { VisualSpec } from '../../../shared/types';
-import { useLesson } from '../../core/lesson';
+import { lesson, useLesson } from '../../core/lesson';
 import { AskModel } from './AskModel';
 import { CameraRig } from './CameraRig';
 import { ControlBar } from './ControlBar';
 import { GestureGuide } from './GestureGuide';
+import { Environment } from './Environment';
 import { ModelGallery } from './ModelGallery';
 import { ModelLayers } from './ModelLayers';
+import { SandboxPanel } from './SandboxPanel';
+import { SandboxScene } from './SandboxScene';
 
 /** The 3D stage. It stays mounted for the whole lesson; `paused` stops rendering and input while hidden. */
-export function VisualStage({ spec, paused = false }: { spec: VisualSpec; paused?: boolean }) {
-  const { loading, visualRequest } = useLesson();
-  const busy = !!loading.visual;
+export function VisualStage({ spec, paused = false }: { spec: VisualSpec | null; paused?: boolean }) {
+  const { loading, visualRequest, stageMode, sandbox } = useLesson();
+  const box = stageMode === 'sandbox';
+  const busy = box ? !!sandbox.busy : !!loading.visual;
   const orient = useRef<THREE.Group>(null);
+  const scene = box ? 'lab' : (spec?.scene ?? (spec?.kind === 'molecule' ? 'lab' : 'plain'));
 
   return (
     <div className="stage-layout">
-      <div className={`stage${busy ? ' busy' : ''}`} aria-busy={busy}>
-        {/* Transparent canvas: the stage background is CSS, so it uses the design tokens. */}
-        <Canvas camera={{ position: [6, 5, 6], fov: 50 }} frameloop={paused ? 'never' : 'always'} dpr={[1, 2]}>
+      <div className={`stage${busy && !box ? ' busy' : ''}`} aria-busy={busy}>
+        {/* Transparent canvas unless the scene paints its own sky; the stage background is CSS. */}
+        <Canvas
+          camera={{ position: [6, 5, 6], fov: 50 }}
+          frameloop={paused ? 'never' : 'always'}
+          dpr={[1, 2]}
+          onPointerMissed={() => box && lesson.sandboxSelect([], 'set')}
+        >
           <ambientLight intensity={0.85} />
           <directionalLight position={[5, 10, 5]} intensity={1.3} />
           <directionalLight position={[-6, -2, -4]} intensity={0.35} />
-          <group ref={orient}>
-            <ModelLayers spec={spec} />
-          </group>
-          <CameraRig resetKey={spec} active={!paused} orient={orient} />
+          <Environment scene={scene} ground={!box && spec?.kind === 'diagram' ? (spec.ground ?? -2.6) : -2.6} />
+          {box ? (
+            <SandboxScene />
+          ) : (
+            <group ref={orient}>{spec && <ModelLayers spec={spec} />}</group>
+          )}
+          <CameraRig resetKey={box ? 'sandbox' : spec} active={!paused} orient={orient} />
         </Canvas>
 
-        <div key={spec.title} className="stage-title">
-          {spec.title}
+        <div key={box ? 'sandbox' : spec?.title} className="stage-title">
+          {box ? 'Chemistry sandbox' : spec?.title}
+        </div>
+        <div className="stage-mode" role="group" aria-label="Stage">
+          <button className={!box ? 'on' : ''} aria-pressed={!box} onClick={() => lesson.setStageMode('models')}>
+            Models
+          </button>
+          <button className={box ? 'on' : ''} aria-pressed={box} onClick={() => lesson.setStageMode('sandbox')}>
+            Sandbox
+          </button>
         </div>
         {busy && (
           <div className="stage-status" role="status">
             <span className="spinner" />
-            {visualRequest ? `Building ${visualRequest}…` : 'Building a new model…'}
+            {box ? (sandbox.busy === 'react' ? 'Running the reaction…' : 'Building the molecule…') : visualRequest ? `Building ${visualRequest}…` : 'Building a new model…'}
           </div>
         )}
-        <ModelGallery />
-        <ControlBar busy={busy} />
-        <AskModel busy={busy} />
+        {!box && <ModelGallery />}
+        <ControlBar busy={busy && !box} />
+        {!box && <AskModel busy={busy} />}
       </div>
-      <GestureGuide />
+      {box ? <SandboxPanel /> : <GestureGuide />}
     </div>
   );
 }

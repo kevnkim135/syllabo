@@ -14,7 +14,14 @@ const REACH = 140; // cursor repel radius
 const TAU = Math.PI * 2;
 
 /** A field of small triangles that scatter away from the cursor and drift back home. */
-export function DeltaField() {
+interface Props {
+  clearCenter?: boolean; // keep the middle empty (home page wordmark and input)
+  gap?: number; // px between deltas
+  faint?: number; // opacity multiplier, for use behind content
+  className?: string;
+}
+
+export function DeltaField({ clearCenter = true, gap = GAP, faint = 1, className = 'delta-field' }: Props = {}) {
   const ref = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -34,21 +41,21 @@ export function DeltaField() {
       canvas.height = h * dpr;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       deltas = [];
-      for (let gy = GAP / 2; gy < h; gy += GAP) {
-        for (let gx = GAP / 2; gx < w; gx += GAP) {
-          const hx = gx + (Math.random() - 0.5) * GAP * 0.8;
-          const hy = gy + (Math.random() - 0.5) * GAP * 0.8;
+      for (let gy = gap / 2; gy < h; gy += gap) {
+        for (let gx = gap / 2; gx < w; gx += gap) {
+          const hx = gx + (Math.random() - 0.5) * gap * 0.8;
+          const hy = gy + (Math.random() - 0.5) * gap * 0.8;
           // Keep the middle clear so the wordmark and input stay readable.
           const cx = (hx - w / 2) / 400;
           const cy = (hy - h * 0.44) / 190;
-          const clear = Math.min(1, Math.max(0, (Math.hypot(cx, cy) - 0.85) * 2.5));
+          const clear = clearCenter ? Math.min(1, Math.max(0, (Math.hypot(cx, cy) - 0.85) * 2.5)) : 1;
           if (clear === 0) continue;
           deltas.push({
             hx, hy, x: hx, y: hy, vx: 0, vy: 0,
             rot: Math.random() * TAU, spin: 0,
             size: 3.5 + Math.random() * 4.5,
             color: COLORS[Math.floor(Math.random() * COLORS.length)],
-            alpha: (0.35 + Math.random() * 0.5) * clear,
+            alpha: (0.35 + Math.random() * 0.5) * clear * faint,
           });
         }
       }
@@ -102,14 +109,15 @@ export function DeltaField() {
     tick();
     window.addEventListener('pointermove', onMove);
     document.addEventListener('pointerleave', onLeave);
-    window.addEventListener('resize', build);
+    const ro = new ResizeObserver(() => build());
+    ro.observe(canvas);
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerleave', onLeave);
-      window.removeEventListener('resize', build);
+      ro.disconnect();
     };
-  }, []);
+  }, [clearCenter, gap, faint]);
 
-  return <canvas ref={ref} className="delta-field" aria-hidden />;
+  return <canvas ref={ref} className={className} aria-hidden />;
 }

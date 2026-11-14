@@ -9,11 +9,12 @@ type Script = (frame: number, tMs: number) => HandInput[];
 
 /** Runs a scripted sequence at 30 fps through a fresh interpreter. */
 function run(script: Script, frames: number) {
-  const cmds: Command[] = [];
-  const step = createGestureInterpreter((c) => cmds.push(c));
+  const cmds: Command[] = []; // everything except the per-frame pointer, which most tests do not care about
+  const all: Command[] = [];
+  const step = createGestureInterpreter((c) => (all.push(c), c.type !== 'pointer' && cmds.push(c)));
   const out: GestureFrame[] = [];
   for (let i = 0; i < frames; i++) out.push(step(script(i, i * DT), 1000 + i * DT));
-  return { cmds, out, types: [...new Set(cmds.map((c) => c.type))] };
+  return { cmds, all, out, types: [...new Set(cmds.map((c) => c.type))] };
 }
 const ramp = (i: number, from: number, to: number) => Math.min(1, Math.max(0, (i - from) / (to - from)));
 // The user's hands in a RAW frame: the right hand is on the image's left and MediaPipe calls it "Left".
@@ -22,6 +23,7 @@ const L = (o: HandOptions = {}): HandInput => makeHand({ at: [0.7, 0.7], label: 
 const POINT: [number, number, number, number] = [0, 1, 1, 1];
 
 // ---------------- zoom (three fingers: pinched together = in, spread apart = out) ----------------
+const only = (cmds: Command[], type: Command['type']) => cmds.filter((c) => c.type === type);
 const zooms = (cmds: Command[]) => cmds.flatMap((c) => (c.type === 'zoom' ? [c.factor] : []));
 const product = (fs: number[]) => fs.reduce((a, b) => a * b, 1);
 const RELAXED = { curl: 0.5, thumbCurl: 0.2 }; // neither open, nor a fist, nor a pinch: the neutral hand
@@ -47,7 +49,7 @@ test('zoom: holding thumb, index and middle spread (ring and pinky folded) zooms
 
 test('zoom: an open hand, a two-finger pinch and a peace sign never zoom', () => {
   assert.deepEqual(run(() => [R()], 60).cmds, []);
-  assert.deepEqual(run(() => [R({ pinch: true })], 60).cmds, []);
+  assert.deepEqual(only(run(() => [R({ pinch: true })], 60).cmds, 'zoom'), []); // a two-finger pinch is the sandbox grab, never zoom
   assert.deepEqual(run(() => [R({ curl: [0, 0, 1, 1], thumbCurl: 1 })], 60).cmds, []);
 });
 
@@ -258,4 +260,36 @@ test('two open hands, or no hands, do nothing', () => {
 test('overlay data: each hand reports the user side, pose and 21 filtered landmarks', () => {
   const f = run(() => [L({ pinch: true }), R({ curl: POINT })], 5).out.at(-1)!;
   assert.deepEqual(f.hands.map((h) => [h.side, h.pose, h.image.length]), [['left', 'pinch', 21], ['right', 'point', 21]]);
+});
+
+// ---------------- direct manipulation (sandbox) ----------------
+
+test('pointer: a pointing or pinching hand drives a mirrored screen pointer, hidden when it goes', () => {
+  const r = run((i) => (i < 20 ? [R({ curl: POINT, at: [0.3, 0.6] })] : []), 30);
+  const ps = only(r.all, 'pointer');
+  assert.ok(ps.length > 10);
+  const first = ps[0] as Extract<Command, { type: 'pointer' }>;
+  assert.ok(first.visible && first.x > 0.5, 'raw image left = user right = screen right after mirroring');
+  assert.deepEqual(ps.at(-1), { type: 'pointer', x: 0, y: 0, visible: false });
+});
+
+test('tap: a quick pinch selects; holding becomes a drag with start, moves and end', () => {
+  const quick = run((i) => [R(i >= 10 && i < 16 ? { pinch: true } : { curl: POINT })], 40);
+  assert.deepEqual(only(quick.cmds, 'tap'), [{ type: 'tap' }]);
+  assert.deepEqual(only(quick.cmds, 'grab'), []);
+
+  const hold = run((i) => [R(i >= 10 && i < 50 ? { pinch: true, at: [0.4 - 0.2 * ramp(i, 25, 45), 0.6] } : { curl: POINT })], 70);
+  const g = only(hold.cmds, 'grab') as Extract<Command, { type: 'grab' }>[];
+  assert.equal(g[0].phase, 'start');
+  assert.equal(g.at(-1)!.phase, 'end');
+  const dx = g.filter((x) => x.phase === 'move').reduce((s, x) => s + x.dx, 0);
+  assert.ok(dx > 0.1, `dragged ${dx}: the hand moved to the user's right`);
+  assert.deepEqual(only(hold.cmds, 'tap'), []);
+});
+
+test('scale: both hands pinching and spreading grows the selection', () => {
+  const r = run((i) => [L({ pinch: true, at: [0.65 + 0.15 * ramp(i, 10, 40), 0.6] }), R({ pinch: true, at: [0.35 - 0.15 * ramp(i, 10, 40), 0.6] })], 50);
+  const f = (only(r.cmds, 'scaleSel') as Extract<Command, { type: 'scaleSel' }>[]).reduce((p, c) => p * c.factor, 1);
+  assert.ok(f > 1.3, `scaled ${f}`);
+  assert.deepEqual(only(r.cmds, 'rotateAxis'), []);
 });

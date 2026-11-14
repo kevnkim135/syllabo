@@ -9,6 +9,7 @@
   --lilac-100: #e6d9ff;
   --lilac-300: #b9a0f0;
   --plum: #4a3784; /* text only */
+  --ink: #15111d; /* near-black, used sparingly for headings and key labels */
 
   --bg: var(--white);
   --surface: var(--white);

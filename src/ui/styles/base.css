@@ -2,6 +2,7 @@
 [hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); -webkit-font-smoothing: antialiased; }
 h1, h2, h3 { margin: 0; font-weight: 700; letter-spacing: -0.02em; }
+h1, h2 { color: var(--ink); }
 h3 { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); margin: 1.25rem 0 0.5rem; }
 p { margin: 0 0 0.75rem; }
 

@@ -17,7 +17,12 @@ export type Command =
   // ---- content (handled by core/lesson.ts) ----
   | { type: 'newExample' } // a different random model
   | { type: 'modelStep'; step: 1 | -1 } // next / previous model in this lesson's gallery (swipe left / right)
-  | { type: 'ask'; text: string } // a free-form spoken request: core/assistant.ts works out what it means
+  | { type: 'ask'; text: string }
+  // ---- direct manipulation (handled by the sandbox; ignored elsewhere) ----
+  | { type: 'pointer'; x: number; y: number; visible: boolean } // fingertip as a screen pointer, 0..1 (x right, y down)
+  | { type: 'tap' } // quick pinch: select / deselect what the pointer is on
+  | { type: 'grab'; phase: 'start' | 'move' | 'end'; dx: number; dy: number; dz: number } // pinch held: drag; dx, dy screen fractions, dz metres toward the user
+  | { type: 'scaleSel'; factor: number } // a free-form spoken request: core/assistant.ts works out what it means
   | { type: 'generate'; request: string } // "show me benzene", "graph x squared minus y squared"
   | { type: 'solve'; question: string }; // spoken or typed problem
 

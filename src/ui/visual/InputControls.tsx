@@ -21,6 +21,9 @@ const GESTURE_TEXT: Record<GestureLabel, string> = {
   fists: 'Hold both fists to go home',
   home: 'Home',
   modelNext: 'Next model',
+  grab: 'Pinch: tap to select, hold to drag',
+  dragging: 'Dragging the selection',
+  scale: 'Both pinches: spread or close to scale',
   modelPrev: 'Previous model',
 };
 const EVENTS: GestureLabel[] = ['newExample', 'home', 'modelNext', 'modelPrev'];

@@ -1,6 +1,6 @@
 // Runtime validation of model output against shared/types.ts. Returns a cleaned value or undefined.
 import { evaluate } from 'mathjs';
-import { LESSON_KINDS, type IntentResult, type LessonKind, type LessonMap, type Problem, type ScopeInfo, type TopicDetail, type TopicNode, type VisualSpec, type VoiceIntent } from '../shared/types';
+import { BODY_SHAPES, LESSON_KINDS, SCENES, type BodyShape, type MoleculeSpec, type ReactionResult, type SceneKind, type IntentResult, type LessonKind, type LessonMap, type Problem, type ScopeInfo, type TopicDetail, type TopicNode, type VisualSpec, type VoiceIntent } from '../shared/types';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
@@ -27,7 +27,7 @@ function visual(v: unknown): VisualSpec | undefined {
     const bonds = v.bonds
       .filter((b) => isObj(b) && num(b.a) && num(b.b) && b.a < atoms.length && b.b < atoms.length && b.a >= 0 && b.b >= 0)
       .map((b) => ({ ...(b as object), order: [1, 2, 3].includes((b as { order: number }).order) ? (b as { order: number }).order : 1 }));
-    return { ...v, atoms, bonds } as VisualSpec;
+    return { ...v, atoms, bonds, scene: scene(v.scene) } as VisualSpec;
   }
   if (v.kind === 'surface') {
     const ok = (r: unknown) => Array.isArray(r) && r.length === 2 && num(r[0]) && num(r[1]) && r[0] < r[1];
@@ -37,7 +37,7 @@ function visual(v: unknown): VisualSpec | undefined {
     } catch {
       return undefined;
     }
-    return v as unknown as VisualSpec;
+    return { ...v, scene: scene(v.scene) } as unknown as VisualSpec;
   }
   if (v.kind === 'diagram') {
     if (!Array.isArray(v.elements)) return undefined;
@@ -46,13 +46,42 @@ function visual(v: unknown): VisualSpec | undefined {
     const elements = v.elements.filter((e) => {
       if (!isObj(e)) return false;
       if (e.type === 'body') return str(e.id) && str(e.label) && num(e.x) && num(e.y);
+      if (e.type === 'path') return Array.isArray(e.points) && e.points.length >= 2 && e.points.every((p) => Array.isArray(p) && num(p[0]) && num(p[1]));
       if (e.type === 'vector') return typeof e.from === 'string' && ids.has(e.from) && num(e.dx) && num(e.dy);
       if (e.type === 'link') return typeof e.a === 'string' && typeof e.b === 'string' && ids.has(e.a) && ids.has(e.b);
       return false;
     });
-    return elements.length ? ({ ...v, elements } as unknown as VisualSpec) : undefined;
+    // Unknown shapes fall back to a sphere; malformed motion is dropped rather than failing the model.
+    const cleaned = elements.map((e) => {
+      if (!isObj(e) || e.type !== 'body') return e;
+      const m = e.motion;
+      const motion = isObj(m) && num(m.vx) && num(m.vy) ? { vx: m.vx, vy: m.vy, ax: num(m.ax) ? m.ax : 0, ay: num(m.ay) ? m.ay : 0, duration: num(m.duration) && m.duration > 0.3 && m.duration < 30 ? m.duration : 3 } : undefined;
+      return { ...e, shape: BODY_SHAPES.includes(e.shape as BodyShape) ? e.shape : undefined, color: str(e.color) ? e.color : undefined, motion };
+    });
+    return elements.length ? ({ ...v, elements: cleaned, scene: scene(v.scene), ground: num(v.ground) ? v.ground : undefined } as unknown as VisualSpec) : undefined;
   }
   return undefined;
+}
+
+const scene = (s: unknown): SceneKind | undefined => (SCENES.includes(s as SceneKind) ? (s as SceneKind) : undefined);
+
+/** A molecule only (the sandbox needs molecules, whatever the subject). */
+export function validateMolecule(raw: unknown): MoleculeSpec | undefined {
+  const v = visual(isObj(raw) ? { ...raw, kind: 'molecule' } : raw);
+  return v?.kind === 'molecule' ? v : undefined;
+}
+
+export function validateReaction(raw: unknown): ReactionResult | undefined {
+  if (!isObj(raw) || typeof raw.reacts !== 'boolean' || !str(raw.explanation)) return undefined;
+  const products = (Array.isArray(raw.products) ? raw.products : []).flatMap((p) => {
+    if (!isObj(p) || !str(p.name)) return [];
+    const molecule = validateMolecule(p.molecule);
+    if (!molecule) return [];
+    const count = num(p.count) && p.count >= 1 && p.count <= 6 ? Math.round(p.count) : 1;
+    return [{ name: p.name.trim(), count, molecule }];
+  });
+  if (raw.reacts && !products.length) return undefined; // a reaction must show what it makes
+  return { reacts: raw.reacts, equation: str(raw.equation) ? raw.equation.trim() : '', explanation: raw.explanation.trim(), products: raw.reacts ? products : [] };
 }
 
 export function validateDetail(raw: unknown): TopicDetail | undefined {
@@ -65,6 +94,7 @@ export function validateDetail(raw: unknown): TopicDetail | undefined {
     explanation: raw.explanation,
     keyPoints: Array.isArray(raw.keyPoints) ? raw.keyPoints.filter(str) : [],
     example: str(raw.example) ? raw.example : undefined,
+    imageQuery: str(raw.imageQuery) ? raw.imageQuery.trim().slice(0, 120) : undefined,
     subtopics,
   };
 }
@@ -79,6 +109,26 @@ export function validateScope(raw: unknown): ScopeInfo | undefined {
 }
 
 /** A voice intent from the model; anything malformed becomes "none". */
+/**
+ * Models sometimes write single backslashes inside JSON strings, so "\frac" arrives as a form feed + "rac"
+ * and "\times" as a tab + "imes". Put those LaTeX commands back. Real newlines are kept, except before a
+ * handful of LaTeX names that start with "n" (\neq, \nabla...).
+ */
+export function repairLatex(s: string): string {
+  return s
+    .replace(/\f/g, '\\f')
+    .replace(/\x08/g, '\\b')
+    .replace(/\t(?=[a-zA-Z])/g, '\\t')
+    .replace(/\r(?=[a-zA-Z])/g, '\\r')
+    .replace(/\n(?=(?:eq|abla|eg|ot|u\b|i\b|ewline|exists|leq|geq|parallel|mid|subseteq)\b)/g, '\\n');
+}
+const fixProblem = (p: Record<string, unknown>) => ({
+  ...p,
+  prompt: repairLatex(String(p.prompt)),
+  solution: repairLatex(String(p.solution)),
+  ...(typeof p.why === 'string' ? { why: repairLatex(p.why) } : {}),
+});
+
 export function validateIntent(raw: unknown): IntentResult | undefined {
   if (!isObj(raw) || !isObj(raw.intent)) return undefined;
   const i = raw.intent;
@@ -93,7 +143,16 @@ export function validateIntent(raw: unknown): IntentResult | undefined {
     case 'goto': intent = LESSON_KINDS.includes(i.section as LessonKind) ? { action: 'goto', section: i.section as LessonKind } : undefined; break;
     case 'modelStep': intent = { action: 'modelStep', step: i.step === -1 ? -1 : 1 }; break;
     case 'save': intent = { action: 'save', folder: s(i.folder) }; break;
-    case 'widen': case 'newExample': case 'library': case 'home': case 'none': intent = { action: i.action }; break;
+    case 'widen': case 'newExample': case 'library': case 'home': case 'none': case 'sandbox': case 'sandboxClear': intent = { action: i.action }; break;
+    case 'sandboxAdd': intent = s(i.name) ? { action: 'sandboxAdd', name: s(i.name)!, count: num(i.count) && i.count >= 1 && i.count <= 6 ? Math.round(i.count) : undefined } : undefined; break;
+    case 'sandboxRemove': intent = s(i.target) ? { action: 'sandboxRemove', target: s(i.target)! } : undefined; break;
+    case 'sandboxReact': intent = { action: 'sandboxReact', condition: s(i.condition) }; break;
+    case 'sandboxMove': {
+      const dirs = ['left', 'right', 'up', 'down', 'closer', 'farther', 'together', 'apart'] as const;
+      const d = dirs.find((x) => x === i.direction);
+      intent = s(i.target) && d ? { action: 'sandboxMove', target: s(i.target)!, direction: d } : undefined;
+      break;
+    }
   }
   return intent ? { intent, say: s(raw.say) ?? '' } : undefined;
 }
@@ -127,7 +186,7 @@ export function validate<K extends LessonKind>(kind: K, raw: unknown, explored: 
           const difficulty = ['base', 'intro', 'core', 'edge'].includes(rest.difficulty as string) ? rest.difficulty : 'core';
           // A topic is kept only when it names one the student actually explored (case-insensitive).
           const match = str(topic) ? explored.find((t) => t.toLowerCase() === topic.trim().toLowerCase()) : undefined;
-          return { ...rest, difficulty, ...(match ? { topic: match } : {}) };
+          return fixProblem({ ...rest, difficulty, ...(match ? { topic: match } : {}) });
         });
       return (out?.length ? out : undefined) as LessonMap[K] | undefined;
     }

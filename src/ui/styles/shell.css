@@ -4,7 +4,7 @@
 .sidebar { background: var(--lilac-50); border-right: 1px solid var(--line); padding: 20px 12px; display: flex; flex-direction: column; gap: 4px; }
 .sidebar button { display: flex; align-items: center; gap: 0.7rem; width: 100%; text-align: left; border: 1px solid transparent; background: none; border-radius: var(--radius-sm); padding: 0.6rem 0.75rem; }
 .sidebar button:hover { background: color-mix(in srgb, var(--white) 60%, transparent); border-color: transparent; }
-.sidebar .brand { font-weight: 800; font-size: 1.05rem; letter-spacing: -0.03em; margin-bottom: 18px; }
+.sidebar .brand { color: var(--ink); font-weight: 800; font-size: 1.05rem; letter-spacing: -0.03em; margin-bottom: 18px; }
 .sidebar .brand svg { color: var(--violet); }
 .sidebar .nav.on { background: var(--white); color: var(--violet); font-weight: 600; box-shadow: var(--shadow); }
 .sidebar svg { width: 18px; height: 18px; flex: none; }

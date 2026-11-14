@@ -29,9 +29,14 @@ export interface Problem {
 }
 
 // ---- Interactive visual specs (LLM picks one) ----
+/** The world the model sits in. */
+export const SCENES = ['plain', 'ground', 'space', 'lab', 'water'] as const;
+export type SceneKind = (typeof SCENES)[number];
+
 export interface MoleculeSpec {
   kind: 'molecule';
   title: string;
+  scene?: SceneKind;
   atoms: { element: string; x: number; y: number; z: number }[]; // angstroms
   bonds: { a: number; b: number; order: 1 | 2 | 3 }[]; // indices into atoms
 }
@@ -39,6 +44,7 @@ export interface MoleculeSpec {
 export interface SurfaceSpec {
   kind: 'surface';
   title: string;
+  scene?: SceneKind;
   expr: string; // mathjs syntax in x and y, e.g. "sin(x) * cos(y)"
   xRange: [number, number];
   yRange: [number, number];
@@ -50,6 +56,7 @@ export interface TopicDetail {
   explanation: string; // 2-4 short paragraphs, plain text
   keyPoints: string[];
   example?: string;
+  imageQuery?: string; // Wikipedia article title whose lead image illustrates the topic
   subtopics: TopicNode[]; // clickable, expand again
 }
 
@@ -60,15 +67,31 @@ export interface ExpandRequest {
   level?: string;
 }
 
-export type BodyElement = { type: 'body'; id: string; label: string; x: number; y: number; radius?: number };
+/** Recognisable objects drawn instead of plain spheres, like textbook figures. */
+export const BODY_SHAPES = ['ball', 'block', 'box', 'car', 'cart', 'plane', 'rocket', 'person', 'planet', 'sun', 'moon', 'satellite', 'boat', 'pulley', 'spring', 'ramp', 'charge'] as const;
+export type BodyShape = (typeof BODY_SHAPES)[number];
+
+/** Constant-acceleration motion, replayed in a loop: x = x0 + vx t + ax t^2 / 2 (same for y). Units per second. */
+export interface BodyMotion {
+  vx: number;
+  vy: number;
+  ax?: number;
+  ay?: number;
+  duration?: number; // seconds per loop (default 3)
+}
+
+export type BodyElement = { type: 'body'; id: string; label: string; x: number; y: number; radius?: number; shape?: BodyShape; color?: string; motion?: BodyMotion };
 export type DiagramElement =
   | BodyElement
+  | { type: 'path'; points: [number, number][]; label?: string } // a trajectory or outline, drawn dashed
   | { type: 'vector'; from: string; label: string; dx: number; dy: number }
   | { type: 'link'; a: string; b: string; label?: string };
 
 export interface DiagramSpec {
   kind: 'diagram';
   title: string;
+  scene?: SceneKind;
+  ground?: number; // y of the ground line, when there is one
   elements: DiagramElement[]; // coordinates roughly within -5..5
 }
 
@@ -129,6 +152,13 @@ export type VoiceIntent =
   | { action: 'open'; title: string } // switch to an open lesson or reopen a saved one
   | { action: 'library' }
   | { action: 'home' }
+  // chemistry sandbox: a shared 3D space of molecules
+  | { action: 'sandbox' } // open the sandbox
+  | { action: 'sandboxAdd'; name: string; count?: number }
+  | { action: 'sandboxMove'; target: string; direction: 'left' | 'right' | 'up' | 'down' | 'closer' | 'farther' | 'together' | 'apart' }
+  | { action: 'sandboxRemove'; target: string }
+  | { action: 'sandboxReact'; condition?: string }
+  | { action: 'sandboxClear' }
   | { action: 'none' };
 
 export interface IntentContext {
@@ -140,6 +170,7 @@ export interface IntentContext {
   open?: string[]; // titles of lessons open in tabs
   saved?: string[]; // titles of saved lessons
   folders?: string[];
+  sandbox?: string[]; // names of molecules in the sandbox, when it is open
 }
 
 export interface IntentRequest {
@@ -150,4 +181,19 @@ export interface IntentRequest {
 export interface IntentResult {
   intent: VoiceIntent;
   say: string; // short confirmation shown to the user
+}
+
+// ---- Chemistry sandbox ----
+/** POST /api/molecule body { name } -> MoleculeSpec */
+export interface ReactRequest {
+  reactants: { name: string; formula?: string; count?: number }[];
+  condition?: string; // "heat", "a platinum catalyst", "in water"...
+  level?: string;
+}
+/** POST /api/react -> what happens when the reactants meet under the condition. */
+export interface ReactionResult {
+  reacts: boolean;
+  equation: string; // balanced, plain text, e.g. "CH4 + 2 O2 -> CO2 + 2 H2O"
+  explanation: string; // 2-3 sentences: what happens and why (or why nothing happens)
+  products: { name: string; count: number; molecule: MoleculeSpec }[];
 }

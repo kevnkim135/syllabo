@@ -36,6 +36,7 @@ function context(): IntentContext {
     open: ws.tabs.map((t) => t.title),
     saved: lib.lessons.map(lessonTitle),
     folders: lib.folders.map((f) => f.name),
+    sandbox: s.subject && s.stageMode === 'sandbox' ? s.sandbox.items.filter((i) => !i.dying).map((i) => i.name) : undefined,
   };
 }
 
@@ -88,6 +89,31 @@ export function perform({ intent }: IntentResult): boolean {
     case 'home':
       lesson.home();
       return true;
+    case 'sandbox':
+      lesson.setStageMode('sandbox');
+      return inLesson;
+    case 'sandboxAdd':
+      if (!inLesson) lesson.start(intent.name);
+      lesson.sandboxAdd(intent.name, intent.count);
+      return true;
+    case 'sandboxMove': {
+      const ids = lesson.sandboxFind(intent.target);
+      if (!ids.length) return false;
+      lesson.sandboxNudge(ids, intent.direction);
+      return true;
+    }
+    case 'sandboxRemove': {
+      const ids = lesson.sandboxFind(intent.target);
+      if (!ids.length) return false;
+      lesson.sandboxRemove(ids);
+      return true;
+    }
+    case 'sandboxReact':
+      lesson.sandboxReact(intent.condition);
+      return inLesson;
+    case 'sandboxClear':
+      lesson.sandboxClear();
+      return inLesson;
     case 'none':
       return false;
   }

@@ -44,3 +44,15 @@ test('chit-chat does nothing, and every result has something to say', () => {
   assert.equal(r.intent.action, 'none');
   assert.ok(r.say.length > 0);
 });
+
+test('sandbox: add, move, react with a condition, remove', () => {
+  const box: IntentContext = { ...chem, sandbox: ['Methane'] };
+  assert.deepEqual(act('add two oxygens', box), { action: 'sandboxAdd', name: 'oxygen', count: 2 });
+  assert.deepEqual(act('add methane to the sandbox', {}), { action: 'sandboxAdd', name: 'methane', count: 1 });
+  assert.deepEqual(act('move the methane to the left', box), { action: 'sandboxMove', target: 'the methane', direction: 'left' });
+  assert.deepEqual(act('push them together', box), { action: 'sandboxMove', target: 'them', direction: 'together' });
+  assert.deepEqual(act('react them with heat', box), { action: 'sandboxReact', condition: 'heat' });
+  assert.deepEqual(act('now ignite it', box), { action: 'sandboxReact', condition: 'heat' });
+  assert.deepEqual(act('remove the water', box), { action: 'sandboxRemove', target: 'the water' });
+  assert.deepEqual(act('open the sandbox'), { action: 'sandbox' });
+});

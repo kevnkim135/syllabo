@@ -3,11 +3,11 @@ import type { ExpandRequest, IntentRequest, LessonKind, LessonRequest, SolveRequ
 export const SYSTEM = `You are an expert teacher and curriculum designer.
 Be accurate and prefer well-established facts, names and dates.
 Respond with ONLY valid JSON matching the requested shape: no markdown, no code fences, no commentary.
-Write math as plain text (x^2, sqrt(x), integral of f dx), never LaTeX.`;
+Unless a request says otherwise, write math as plain text (x^2, sqrt(x), integral of f dx), not LaTeX.`;
 
 const SCHEMAS: Record<LessonKind, string> = {
   timeline: `A JSON array of 10-16 events in chronological order covering the field's full history.
-Mix three types: "discovery" (a finding or invention), "event" (a historical event, publication, institution, war, experiment) and "figure" (a milestone in a prominent person's life or work). Always name the person when there is one.
+Mix three types: "discovery" (a finding or invention), "event" (a historical event, publication, institution, war, experiment) and "figure" (a milestone in a prominent person's life or work). Always name the person when there is one. Include at least 3 of each type, so the timeline shows people and historical context, not only findings.
 [{"year": "1869", "type": "discovery", "title": "Periodic table", "figure": "Dmitri Mendeleev", "detail": "1-2 sentences on the finding and why it mattered", "related": ["2-4 short related terms, people or ideas worth exploring next"]}]`,
 
   topics: `A JSON array of 5-8 top-level topics that together give a complete overview of the subject. Each has a one-sentence summary and 2-5 children (subtopics, each with a summary, no deeper nesting needed: the user can click to expand any of them later):
@@ -18,7 +18,8 @@ Mix three types: "discovery" (a finding or invention), "event" (a historical eve
 - "intro": 2 straightforward problems applying a single idea
 - "core": 3-4 standard problems combining ideas
 - "edge": 2-3 borderline cases where students commonly go wrong (limits, degenerate inputs, sign errors, units, division by zero)
-[{"prompt": "...", "solution": "numbered step-by-step worked solution", "difficulty": "base", "why": "what this tests and the common mistake", "topic": "only when the student studied topics are listed above: the one this problem builds on, copied exactly; otherwise omit"}]`,
+Write every mathematical expression in LaTeX between $...$ (inline) or $$...$$ (a displayed equation), written in the JSON as "$\\\\frac{dy}{dx} = 3x^2$". Because this is JSON, double every backslash (\\\\frac, \\\\sqrt, \\\\times). Use plain text for everything else.
+[{"prompt": "...", "solution": "numbered step-by-step worked solution, one step per line", "difficulty": "base", "why": "what this tests and the common mistake", "topic": "only when the student studied topics are listed above: the one this problem builds on, copied exactly; otherwise omit"}]`,
 
   visual: `A JSON object describing ONE interactive 3D model that best illustrates a core idea of the subject. Pick exactly one shape:
 
@@ -28,12 +29,18 @@ Mix three types: "discovery" (a finding or invention), "event" (a historical eve
 2. Multivariable calculus / functions of two variables -> surface z = f(x, y), expr in mathjs syntax:
 {"kind": "surface", "title": "...", "expr": "sin(x) * cos(y)", "xRange": [-3, 3], "yRange": [-3, 3]}
 
-3. Physics or anything else -> labeled diagram, coordinates within -5..5:
-{"kind": "diagram", "title": "...", "elements": [
-  {"type": "body", "id": "m1", "label": "Block (2 kg)", "x": 0, "y": 0},
-  {"type": "vector", "from": "m1", "label": "Gravity", "dx": 0, "dy": -2},
-  {"type": "link", "a": "m1", "b": "m2", "label": "rope"}
-]}`,
+3. Physics or anything else -> a labeled diagram drawn like a textbook figure, coordinates within -5..5 (x right, y up):
+{"kind": "diagram", "title": "...", "scene": "ground", "ground": -2, "elements": [
+  {"type": "body", "id": "car", "label": "Car (1200 kg)", "x": -4, "y": -1.6, "shape": "car", "motion": {"vx": 2, "vy": 0, "ax": 0.5, "ay": 0, "duration": 3}},
+  {"type": "vector", "from": "car", "label": "Friction", "dx": -1.2, "dy": 0},
+  {"type": "link", "a": "m1", "b": "m2", "label": "rope"},
+  {"type": "path", "points": [[-4, -1.6], [0, 1], [4, -1.6]], "label": "trajectory"}
+]}
+- "shape" makes a body a recognisable object; use one whenever it fits the lesson: ball, block, box, car, cart, plane, rocket, person, planet, sun, moon, satellite, boat, pulley, spring, ramp, charge.
+- "motion" animates a body with constant acceleration (units per second; gravity is about ay = -9.8 scaled to fit, e.g. -4). Use it for kinematics, projectiles, orbits-as-arcs, falling objects, so the diagram plays like a simulation. Vectors attached to the body move with it. Keep moving bodies inside -5..5 for the whole loop.
+- "path" draws a dashed trajectory or outline. "ground" is the y of the ground line when objects rest on or move over ground.
+
+Every model may also set "scene" for the world around it: "ground" (outdoors: sky and ground, for motion near the Earth), "space" (stars, for astronomy and orbits), "lab" (a lab bench floor, for chemistry), "water" (a water surface, for buoyancy and boats), or "plain" (empty, for abstract math).`,
 };
 
 export function buildPrompt({ subject, kind, level = 'high school', focus, explored, request, variant }: LessonRequest) {
@@ -65,9 +72,11 @@ export function buildSolvePrompt({ subject, level = 'high school', focus, questi
   return `Subject: ${subject}${focus ? ` (${focus})` : ''}\nAudience level: ${level}
 ${hasImage ? 'The attached image contains a problem the student wants solved.' : ''}${question ? `\nThe student says: "${question}"` : ''}
 
+Write every mathematical expression in LaTeX between $...$ (inline) or $$...$$ (a displayed equation), written in the JSON as "$\\\\frac{dy}{dx} = 3x^2$". Because this is JSON, double every backslash (\\\\frac, \\\\sqrt, \\\\times). Use plain text for everything else.
+
 Produce a JSON object:
-{"prompt": "the problem restated precisely as plain text",
- "solution": "numbered step-by-step worked solution ending with the final answer",
+{"prompt": "the problem restated precisely",
+ "solution": "numbered step-by-step worked solution, one step per line, ending with the final answer",
  "difficulty": "base" | "intro" | "core" | "edge",
  "why": "the key idea this tests and the common mistake"}`;
 }
@@ -81,6 +90,7 @@ Produce a JSON object:
  "explanation": "2-4 short paragraphs separated by \\n\\n explaining the topic clearly in the context above",
  "keyPoints": ["3-6 short bullet points a student must remember"],
  "example": "one concrete worked example or analogy (optional)",
+ "imageQuery": "the title of the English Wikipedia article whose main image best illustrates this topic (a diagram, apparatus, structure or photo), e.g. \"Benzene\" or \"Projectile motion\"",
  "subtopics": [{"title": "...", "summary": "one sentence"}]}
 Give 3-5 subtopics that go one level deeper than "${topic}".`;
 }
@@ -98,6 +108,7 @@ Current state:
 - Lessons open in tabs: ${list(c.open)}
 - Saved lessons: ${list(c.saved)}
 - Folders: ${list(c.folders)}
+- Chemistry sandbox: ${c.sandbox ? (c.sandbox.length ? `open, holding ${list(c.sandbox)}` : 'open and empty') : 'closed'}
 
 The student said: "${transcript}"
 
@@ -114,9 +125,38 @@ Actions (pick exactly one):
 - {"action": "open", "title": "..."}: switch to an open lesson or reopen a saved one; title must be copied exactly from the open or saved lists.
 - {"action": "library"}: show saved lessons and folders.
 - {"action": "home"}
+- {"action": "sandbox"}: open the chemistry sandbox (a shared 3D space for several molecules).
+- {"action": "sandboxAdd", "name": "...", "count": 1}: put molecules into the sandbox ("add two waters" -> name "water", count 2).
+- {"action": "sandboxMove", "target": "...", "direction": "left" | "right" | "up" | "down" | "closer" | "farther" | "together" | "apart"}: move sandbox molecules; target is a molecule name from the sandbox, "selected", or "all".
+- {"action": "sandboxRemove", "target": "..."}
+- {"action": "sandboxReact", "condition": "..."}: make the sandbox molecules react, optionally under a condition ("heat", "a spark", "a platinum catalyst", "in water"); omit condition if none given.
+- {"action": "sandboxClear"}
 - {"action": "none"}: chit-chat, or nothing actionable.
+
+When the sandbox is open, "add X", "put X in", "move/push X left", "heat them up", "react these" refer to the sandbox.
 
 Decide "focus" vs "newLesson" by meaning, not shared words: "photosynthesis" during "organic chemistry" is a new lesson; "SN2 reactions" during "organic chemistry" is a focus.
 
 Respond with ONLY a JSON object: {"intent": <one action object>, "say": "a short confirmation of what you are doing, under 10 words"}`;
+}
+
+export function buildMoleculePrompt(name: string) {
+  return `Produce ONE molecule as a JSON object with realistic 3D geometry (coordinates in angstroms, centred near the origin, bond order 2 or 3 where real, include hydrogens):
+{"kind": "molecule", "title": "Common name (formula)", "atoms": [{"element": "O", "x": 0, "y": 0, "z": 0}], "bonds": [{"a": 0, "b": 1, "order": 1}]}
+Molecule: "${name}". If it is an element that exists as molecules, use the molecule (O2, N2, Cl2); a metal or ionic solid may be a single atom or one formula unit.`;
+}
+
+export function buildReactPrompt({ reactants, condition, level = 'high school' }: { reactants: { name: string; formula?: string; count?: number }[]; condition?: string; level?: string }) {
+  const list = reactants.map((r) => `${r.count && r.count > 1 ? `${r.count} x ` : ''}${r.name}${r.formula ? ` (${r.formula})` : ''}`).join(', ');
+  return `A ${level} student placed these together in a virtual chemistry sandbox: ${list}.
+Condition: ${condition?.trim() || 'room temperature, nothing added'}.
+
+Say what really happens. If they react under this condition, give the main products. If not, say so and what would be needed (for example heat, a spark, a catalyst, water).
+
+Produce a JSON object:
+{"reacts": true | false,
+ "equation": "balanced equation in plain text, e.g. CH4 + 2 O2 -> CO2 + 2 H2O (empty string if no reaction)",
+ "explanation": "2-3 short sentences: what happens and why, or why nothing happens and what would make it react",
+ "products": [{"name": "Water", "count": 2, "molecule": {"kind": "molecule", "title": "Water (H2O)", "atoms": [...], "bonds": [...]}}]}
+Products use realistic 3D geometry in angstroms with hydrogens; "count" is the number of that molecule to show (1-6). Empty products when there is no reaction.`;
 }

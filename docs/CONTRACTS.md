@@ -20,6 +20,10 @@
 - `POST /api/intent` body `IntentRequest` `{ transcript, context: { subject?, focus?, section?, model?, topics?, open?, saved?, folders? } }`
   -> `IntentResult` `{ intent: VoiceIntent, say }`. Uses Claude with a key, `shared/intentRules.ts` otherwise or on failure.
 
+- `POST /api/molecule` body `{ name }` -> `MoleculeSpec` (chemistry sandbox)
+- `POST /api/react` body `ReactRequest` `{ reactants: [{ name, formula?, count? }], condition?, level? }` -> `ReactionResult`
+  `{ reacts, equation, explanation, products: [{ name, count, molecule }] }`
+
 Model output is validated in `server/validate.ts`, retried once, then 502. Results are cached in memory
 (except `/api/solve`). Client wrappers: `src/core/api.ts`.
 

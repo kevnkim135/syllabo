@@ -72,6 +72,35 @@ export function ruleIntent(transcript: string, ctx: IntentContext = {}): IntentR
     if (title) return r({ action: 'open', title }, `Opening ${title}`);
   }
 
+  // chemistry sandbox
+  const inBox = ctx.sandbox !== undefined || /\bsandbox\b/.test(t);
+  if (/\b(?:open|show|go to|start|use)\b.*\bsandbox\b|^sandbox$/.test(t)) return r({ action: 'sandbox' }, 'Opening the sandbox');
+  if (/\b(?:clear|empty|reset)\b.*\bsandbox\b|^clear (?:it|everything|all)$/.test(t)) return r({ action: 'sandboxClear' }, 'Cleared the sandbox');
+  const NUM: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
+  const add = /^(?:add|put|place|drop|bring in|throw in|insert)\s+(?:(a|an|one|two|three|four|five|six|\d)\s+)?(?:molecules? of\s+)?(.+?)(?:\s+molecules?)?(?:\s+(?:to|into|in) (?:the )?sandbox)?$/.exec(t);
+  if (add && (inBox || /\bsandbox\b/.test(t))) {
+    const count = add[1] ? (NUM[add[1]] ?? Number(add[1])) : 1;
+    const name = add[2].replace(/\s+and\s+.*$/, '').replace(/s$/, (m) => (count > 1 ? '' : m));
+    return r({ action: 'sandboxAdd', name, count }, `Adding ${count > 1 ? `${count} ` : ''}${name}`);
+  }
+  if (inBox) {
+    const react = /\b(?:react|mix|combine|heat|ignite|burn|spark|light)\b/.exec(t);
+    if (react) {
+      const cond = /\b(?:with|using|under|add(?:ing)?|in)\s+(?:some\s+|a\s+|an\s+)?(heat|a spark|spark|fire|flame|light|water|(?:an? )?(?:\w+ )?catalyst|acid|base|pressure)\b/.exec(t)?.[1] ??
+        (/\b(?:heat|ignite|burn|spark|light)\b/.test(t) ? 'heat' : undefined);
+      return r({ action: 'sandboxReact', condition: cond }, cond ? `Reacting them with ${cond}` : 'Reacting them');
+    }
+    const move = /^(?:move|push|pull|put|shift|slide|bring|take)\s+(.+?)\s+(?:to the |over to the |towards? the |a bit |)?(left|right|up|down|closer|nearer|farther|further|away|back|forward|together|apart)\b/.exec(t);
+    if (move) {
+      const dirMap: Record<string, 'left' | 'right' | 'up' | 'down' | 'closer' | 'farther' | 'together' | 'apart'> = {
+        left: 'left', right: 'right', up: 'up', down: 'down', closer: 'closer', nearer: 'closer', forward: 'closer', farther: 'farther', further: 'farther', away: 'farther', back: 'farther', together: 'together', apart: 'apart',
+      };
+      return r({ action: 'sandboxMove', target: move[1], direction: dirMap[move[2]] }, `Moving ${move[1]} ${move[2]}`);
+    }
+    const remove = /^(?:remove|delete|take out|get rid of)\s+(.+)$/.exec(t);
+    if (remove) return r({ action: 'sandboxRemove', target: remove[1] }, `Removing ${remove[1]}`);
+  }
+
   // navigation
   if (/^(?:(?:go|take me|return|back)(?: back)?(?: to)? )?(?:the )?home(?: page| screen)?$|\bgo home\b|^start over$/.test(t)) return r({ action: 'home' }, 'Going home');
   if (/\b(?:whole|entire|overall|general|broader|bigger) (?:subject|topic|picture)\b|\bwiden\b|\bzoom out of (?:the|this) topic\b|\bback to the (?:main|whole) (?:subject|topic)\b/.test(t)) return r({ action: 'widen' }, 'Back to the whole subject');

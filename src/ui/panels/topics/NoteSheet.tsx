@@ -1,3 +1,4 @@
+import { NoteFigure } from './NoteFigure';
 import { useEffect, useRef, useState } from 'react';
 import type { TopicDetail, TopicNode } from '../../../../shared/types';
 import { fetchExpand } from '../../../core/api';
@@ -13,6 +14,7 @@ const keyOf = (path: string[]) => JSON.stringify(path);
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 interface Ctx {
+  subject: string;
   sheet: Sheet;
   toggle: (path: string[]) => void;
   retry: (path: string[]) => void;
@@ -47,6 +49,7 @@ export function NoteSheet({ topics }: { topics: TopicNode[] }) {
   }, [sheet, subject, level, focus]);
 
   const ctx: Ctx = {
+    subject: focus ? `${subject ?? ""} ${focus}` : (subject ?? ""),
     sheet,
     toggle(path) {
       const key = keyOf(path);
@@ -132,6 +135,7 @@ function Note({ node, path, num, ctx }: { node: TopicNode; path: string[]; num: 
           )}
           {detail && (
             <>
+              <NoteFigure query={detail.imageQuery ?? `${node.title} ${ctx.subject}`} alt={node.title} />
               {detail.explanation.split(/\n{2,}/).map((p, i) => (
                 <p key={i}>{p}</p>
               ))}

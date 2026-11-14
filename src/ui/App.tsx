@@ -45,7 +45,7 @@ export function App() {
   }, [section, s.id, s.focus, view]);
 
   const has = data[section] !== undefined;
-  const showStage = inLesson && section === 'visual' && !!data.visual;
+  const showStage = inLesson && section === 'visual' && (!!data.visual || s.stageMode === 'sandbox');
 
   return (
     <div className="app">
@@ -81,7 +81,7 @@ export function App() {
               </header>
 
               <div key={`${s.id}|${section}`} className="view">
-                {!has && s.loading[section] && <Skeleton label={`Generating ${SECTION_LABELS[section].toLowerCase()}…`} />}
+                {!has && s.loading[section] && !(section === 'visual' && s.stageMode === 'sandbox') && <Skeleton label={`Generating ${SECTION_LABELS[section].toLowerCase()}…`} />}
                 {s.errors[section] && (
                   <p className="error">
                     {s.errors[section]} <button onClick={() => lesson.retry(section)}>Retry</button>
@@ -94,7 +94,7 @@ export function App() {
             </>
           )}
 
-          {stageSpec && (
+          {(stageSpec || s.stageMode === 'sandbox') && (
             <div hidden={!showStage} className="view">
               <Suspense fallback={<Skeleton label="Loading 3D engine…" />}>
                 <VisualStage spec={stageSpec} paused={!showStage} />

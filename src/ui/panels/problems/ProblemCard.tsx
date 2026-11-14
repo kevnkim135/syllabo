@@ -2,6 +2,7 @@ import { useState, type CSSProperties } from 'react';
 import type { Problem } from '../../../../shared/types';
 import { dismissJob, retryJob, type Job, type Origin } from './solveQueue';
 import { splitSteps } from './steps';
+import { MathText } from '../../math/MathText';
 
 const LABEL: Record<Problem['difficulty'], string> = { base: 'base case', intro: 'intro', core: 'core', edge: 'edge case' };
 const SOURCE = { typed: 'typed', spoken: 'spoken', screenshot: 'screenshot' } as const;
@@ -36,13 +37,13 @@ export function ProblemCard({ p, id, n, builds = [], origin, mine, delay = 0 }: 
 
       <div className="problem-body">
         {origin?.shot && <img className="asked-shot" src={origin.shot.url} alt="The screenshot you attached" />}
-        <p className="prompt">{p.prompt}</p>
+        <MathText as="p" className="prompt" text={p.prompt} />
       </div>
 
       {p.why && (
         <details className="hint">
           <summary>Hint: what this tests</summary>
-          <p className="muted">{p.why}</p>
+          <MathText as="p" className="muted" text={p.why} />
         </details>
       )}
 
@@ -52,7 +53,7 @@ export function ProblemCard({ p, id, n, builds = [], origin, mine, delay = 0 }: 
             {steps.slice(0, shown).map((s, i) => (
               <li key={i} style={{ '--i': i + 1 } as CSSProperties}>
                 {total > 1 && <span className="step-n">{i + 1}</span>}
-                <span className="step-text">{s}</span>
+                <MathText className="step-text" text={s} />
               </li>
             ))}
           </ol>

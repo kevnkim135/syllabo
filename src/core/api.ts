@@ -1,4 +1,4 @@
-import type { ExpandRequest, IntentRequest, IntentResult, LessonKind, LessonRequest, LessonResponse, Problem, ScopeInfo, SolveRequest, TopicDetail } from '../../shared/types';
+import type { ExpandRequest, IntentRequest, IntentResult, MoleculeSpec, ReactionResult, ReactRequest, LessonKind, LessonRequest, LessonResponse, Problem, ScopeInfo, SolveRequest, TopicDetail } from '../../shared/types';
 
 async function post<T>(url: string, req: unknown): Promise<T> {
   const res = await fetch(url, {
@@ -46,3 +46,5 @@ export async function fetchExpand(req: ExpandRequest): Promise<TopicDetail> {
 export const fetchScope = (subject: string, level?: string) => post<ScopeInfo>('/api/scope', { subject, level });
 export const fetchSolve = (req: SolveRequest) => post<Problem>('/api/solve', req);
 export const fetchIntent = (req: IntentRequest) => post<IntentResult>('/api/intent', req);
+export const fetchMolecule = (name: string) => post<MoleculeSpec>('/api/molecule', { name });
+export const fetchReact = (req: ReactRequest) => post<ReactionResult>('/api/react', req);

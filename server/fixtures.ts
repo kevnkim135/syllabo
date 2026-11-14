@@ -1,5 +1,5 @@
 // Canned responses so the UI works with no API key (MOCK mode).
-import type { LessonKind, LessonMap, LessonRequest, Problem, ScopeInfo, SolveRequest, TopicDetail, VisualSpec } from '../shared/types';
+import type { LessonKind, LessonMap, LessonRequest, MoleculeSpec, Problem, ReactionResult, ReactRequest, ScopeInfo, SolveRequest, TopicDetail, VisualSpec } from '../shared/types';
 
 const water: VisualSpec = {
   kind: 'molecule',
@@ -25,6 +25,7 @@ const surface: VisualSpec = {
 
 const forces: VisualSpec = {
   kind: 'diagram',
+  scene: 'lab',
   title: 'Atwood machine: two masses on a pulley',
   elements: [
     { type: 'body', id: 'p', label: 'Pulley', x: 0, y: 3, radius: 0.6 },
@@ -82,13 +83,14 @@ const incline: VisualSpec = {
 
 const projectile: VisualSpec = {
   kind: 'diagram',
-  title: 'Projectile at launch: velocity components and gravity',
+  title: 'Projectile motion: a kicked ball follows a parabola',
+  scene: 'ground',
+  ground: -2,
   elements: [
-    { type: 'body', id: 'p', label: 'Ball', x: -3, y: -1, radius: 0.3 },
-    { type: 'vector', from: 'p', label: 'v', dx: 2, dy: 2 },
-    { type: 'vector', from: 'p', label: 'vx', dx: 2, dy: 0 },
-    { type: 'vector', from: 'p', label: 'vy', dx: 0, dy: 2 },
-    { type: 'vector', from: 'p', label: 'g', dx: 0, dy: -1.5 },
+    { type: 'body', id: 'kid', label: 'Kicker', x: -4.4, y: -1.4, shape: 'person' },
+    { type: 'body', id: 'p', label: 'Ball', x: -3.8, y: -1.8, radius: 0.25, shape: 'ball', motion: { vx: 2.5, vy: 4.2, ax: 0, ay: -2.8, duration: 3 } },
+    { type: 'vector', from: 'p', label: 'g', dx: 0, dy: -1.2 },
+    { type: 'path', points: [[-3.8, -1.8], [-2.3, 0.3], [-0.8, 1.3], [0.4, 1.35], [1.6, 0.4], [3.1, -1.8]], label: 'trajectory' },
   ],
 };
 
@@ -172,4 +174,39 @@ export function solveFixture(req: SolveRequest): Problem {
     difficulty: 'core',
     why: 'Mock solution: shows where your own problems appear',
   };
+}
+
+const MOLECULES: [RegExp, MoleculeSpec][] = [
+  [/water|h2o/, water as MoleculeSpec],
+  [/methane|ch4/, methane as MoleculeSpec],
+  [/carbon dioxide|co2/, co2 as MoleculeSpec],
+  [/oxygen|o2/, { kind: 'molecule', title: 'Oxygen (O2)', atoms: [{ element: 'O', x: -0.6, y: 0, z: 0 }, { element: 'O', x: 0.6, y: 0, z: 0 }], bonds: [{ a: 0, b: 1, order: 2 }] }],
+  [/hydrogen|h2/, { kind: 'molecule', title: 'Hydrogen (H2)', atoms: [{ element: 'H', x: -0.37, y: 0, z: 0 }, { element: 'H', x: 0.37, y: 0, z: 0 }], bonds: [{ a: 0, b: 1, order: 1 }] }],
+];
+
+export function moleculeFixture(name: string): MoleculeSpec {
+  const n = name.toLowerCase();
+  const hit = MOLECULES.find(([re]) => re.test(n));
+  return hit ? hit[1] : { ...(water as MoleculeSpec), title: `${name} (mock: shown as water)` };
+}
+
+export function reactFixture(req: ReactRequest): ReactionResult {
+  const names = req.reactants.map((r) => r.name.toLowerCase()).join(' ');
+  const hot = /heat|spark|flame|fire|ignite|burn/.test(req.condition ?? '');
+  if (/methane|ch4/.test(names) && /oxygen|o2/.test(names)) {
+    if (!hot) return { reacts: false, equation: '', explanation: 'Mock: methane and oxygen do not react at room temperature. Add heat or a spark to start combustion.', products: [] };
+    return {
+      reacts: true,
+      equation: 'CH4 + 2 O2 -> CO2 + 2 H2O',
+      explanation: 'Mock: with a spark, methane burns in oxygen to give carbon dioxide and water, releasing heat.',
+      products: [
+        { name: 'Carbon dioxide', count: 1, molecule: co2 as MoleculeSpec },
+        { name: 'Water', count: 2, molecule: water as MoleculeSpec },
+      ],
+    };
+  }
+  if (/hydrogen|h2\b/.test(names) && /oxygen|o2/.test(names) && hot) {
+    return { reacts: true, equation: '2 H2 + O2 -> 2 H2O', explanation: 'Mock: hydrogen burns in oxygen to make water.', products: [{ name: 'Water', count: 2, molecule: water as MoleculeSpec }] };
+  }
+  return { reacts: false, equation: '', explanation: 'Mock mode only knows a couple of reactions (methane or hydrogen with oxygen, plus heat). Add an API key for real chemistry.', products: [] };
 }

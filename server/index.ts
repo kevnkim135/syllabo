@@ -1,8 +1,8 @@
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono, type Context } from 'hono';
-import { IMAGE_TYPES, LESSON_KINDS, type ExpandRequest, type IntentContext, type IntentRequest, type LessonRequest, type SolveRequest } from '../shared/types';
-import { classifyScope, expandTopic, generateLesson, resolveIntent, solveProblem, usingMock } from './llm';
+import { IMAGE_TYPES, LESSON_KINDS, type ExpandRequest, type IntentContext, type IntentRequest, type LessonRequest, type ReactRequest, type SolveRequest } from '../shared/types';
+import { classifyScope, expandTopic, generateLesson, makeMolecule, react, resolveIntent, solveProblem, usingMock } from './llm';
 
 try {
   process.loadEnvFile();
@@ -88,8 +88,29 @@ app.post('/api/intent', async (c) => {
     open: list(x.open, 20),
     saved: list(x.saved, 50),
     folders: list(x.folders, 30),
+    sandbox: list(x.sandbox, 20),
   };
   return c.json(await resolveIntent({ transcript, context }));
+});
+
+app.post('/api/molecule', async (c) => {
+  const name = text((await json<{ name: string }>(c)).name, 80);
+  if (!name) return c.json({ error: 'name is required' }, 400);
+  const data = await makeMolecule(name);
+  if (data === undefined) return c.json({ error: invalid }, 502);
+  return c.json(data);
+});
+
+app.post('/api/react', async (c) => {
+  const b = await json<ReactRequest>(c);
+  const reactants = (Array.isArray(b.reactants) ? b.reactants : []).slice(0, 12).flatMap((r) => {
+    const name = text(r?.name, 80);
+    return name ? [{ name, formula: text(r.formula, 40), count: Number.isInteger(r.count) && r.count! > 0 && r.count! <= 12 ? r.count : 1 }] : [];
+  });
+  if (!reactants.length) return c.json({ error: 'at least one reactant is required' }, 400);
+  const data = await react({ reactants, condition: text(b.condition, 120), level: text(b.level) });
+  if (data === undefined) return c.json({ error: invalid }, 502);
+  return c.json(data);
 });
 
 // Production: serve the built frontend from the same process.
