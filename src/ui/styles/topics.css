@@ -1,33 +1,66 @@
 /* Owner: topics agent */
-.hub { max-width: 620px; margin: 6vh auto 2.5rem; text-align: center; padding: 2rem 2.25rem; animation: bloom 0.45s var(--ease); }
-.hub h2 { font-size: 1.7rem; text-transform: capitalize; margin-bottom: 0.5rem; }
-.hub .ask { margin: 1.25rem 0 0; box-shadow: none; }
-.hub .ask input { font-size: 0.98rem; }
-.branches { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.6rem; max-width: 760px; margin: 0 auto 2.5rem; }
-.branches button { border-radius: var(--pill); padding: 0.5rem 1.1rem; box-shadow: var(--shadow); animation: bloom 0.45s var(--ease) backwards; }
-.branches button:hover { transform: translateY(-2px); }
-.browse { color: var(--muted); font-size: 0.85rem; text-align: center; margin-bottom: 1rem; }
+.topics-wait { text-align: center; margin-top: 18vh; }
 
-.topics-layout { display: grid; grid-template-columns: 360px 1fr; gap: var(--gap); align-items: start; }
-.tree { padding: 0.5rem 1.1rem; }
-.tree section { padding: 0.8rem 0; border-bottom: 1px solid var(--line); }
-.tree section:last-child { border-bottom: none; }
-.tree p { font-size: 0.85rem; margin: 0.2rem 0 0.5rem; }
-.node.top { border: none; background: none; padding: 0; font-weight: 700; font-size: 0.98rem; text-align: left; }
-.node.top:hover, .node.top.on { color: var(--accent); background: none; }
-.tree .chip { font-size: 0.8rem; }
-.detail { min-height: 340px; padding: 1.5rem 2rem; }
-.detail article { max-width: 760px; animation: rise 0.3s var(--ease); }
-.detail h2 { font-size: 1.4rem; margin-bottom: 0.75rem; }
-.detail ul { padding-left: 1.2rem; margin: 0; }
-.detail li { margin: 0.3rem 0; }
-.detail-actions { margin-top: 1.5rem; }
-.crumbs { display: flex; flex-wrap: wrap; align-items: center; margin-bottom: 1rem; font-size: 0.85rem; }
-.crumbs button { background: none; border: none; padding: 0.1rem 0.2rem; color: var(--muted); }
-.crumbs span:last-child button { color: var(--text); font-weight: 600; }
-.crumbs button:hover { color: var(--accent); background: none; }
-.callout { background: var(--surface-2); border-left: 3px solid var(--accent); padding: 0.75rem 1rem; border-radius: var(--radius-sm); white-space: pre-wrap; }
-.deeper { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 0.6rem; }
-.card-btn { display: flex; flex-direction: column; gap: 0.25rem; text-align: left; padding: 0.8rem 1rem; border-radius: var(--radius-sm); }
-.card-btn .muted { font-size: 0.82rem; }
-@media (max-width: 1180px) { .topics-layout { grid-template-columns: 1fr; } }
+/* ---------- Hub: a broad subject asks what to explore ---------- */
+.hub { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 500px) minmax(0, 1fr); align-items: center; column-gap: clamp(2.5rem, 5vw, 5rem); min-height: calc(100vh - 250px); padding: 1rem 0; }
+.hub-links { position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible; }
+.hub-links path { fill: none; stroke: var(--line-strong); stroke-width: 1.5; stroke-linecap: round; stroke-dasharray: 1; animation: hub-draw 0.6s var(--ease) backwards; }
+@keyframes hub-draw { from { stroke-dashoffset: 1; } }
+.hub-core { position: relative; text-align: center; padding: 2.2rem 2.25rem 1.6rem; box-shadow: var(--shadow-lg); animation: bloom 0.45s var(--ease); }
+.hub-core h2 { font-size: 1.8rem; text-transform: capitalize; margin-bottom: 0.5rem; }
+.hub-core > p { margin: 0; }
+.hub-core .ask { margin-top: 1.4rem; box-shadow: none; }
+.hub-core .ask input { font-size: 0.98rem; }
+.hub-core .ask .go:disabled { opacity: 0.45; cursor: default; }
+.hub-core .hub-hint { margin-top: 0.9rem; font-size: 0.8rem; color: var(--muted); }
+.hub-side { display: flex; flex-direction: column; justify-content: center; gap: clamp(1.4rem, 5vh, 3rem); min-width: 0; }
+.hub-side.left { align-items: flex-end; }
+.hub-side.right { align-items: flex-start; }
+.hub-branch { position: relative; max-width: 100%; border-radius: var(--radius); padding: 0.6rem 1.25rem; font-weight: 600; text-align: center; text-wrap: balance; box-shadow: var(--shadow); animation: bloom 0.5s var(--ease) backwards; }
+.hub-branch:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); background: var(--accent-soft); }
+
+/* ---------- Note sheet: an outline that grows in place ---------- */
+.sheet { max-width: 920px; margin: 0 auto; padding: 2rem 2.5rem 2.25rem; animation: rise 0.4s var(--ease); }
+.sheet-head { padding-bottom: 1.1rem; margin-bottom: 0.6rem; border-bottom: 1px solid var(--line); }
+.sheet-eyebrow { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent); }
+.sheet-head h2 { font-size: 1.7rem; text-transform: capitalize; margin: 0.15rem 0 0.45rem; }
+.sheet-head p { margin: 0; max-width: 68ch; }
+.sheet-meta { font-size: 0.82rem; color: var(--muted); margin-top: 0.4rem !important; }
+
+.notes, .note-kids, .note-points { list-style: none; margin: 0; padding: 0; }
+.note { animation: rise 0.35s var(--ease) backwards; }
+.note.top { padding: 0.55rem 0; border-bottom: 1px solid var(--line); }
+.note.top:last-child { border-bottom: none; }
+/* Each level hangs off a thin rule under its parent's number, like indented handwritten notes. */
+.note-kids, .note-body { margin-left: 0.95rem; padding-left: 1.1rem; border-left: 1.5px solid var(--line); }
+.note.open > .note-body, .note.open > .note-kids { border-left-color: var(--line-strong); }
+
+.note-row { display: flex; align-items: center; gap: 0.5rem; }
+.note-line { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 0.7rem; text-align: left; border: 1px solid transparent; background: none; padding: 0.4rem 0.6rem; margin-left: -0.6rem; }
+.note-line:hover { background: var(--surface-2); border-color: transparent; }
+.note-line:active { transform: none; }
+.note-num { flex: none; min-width: 1.4rem; font-size: 0.78rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent); }
+.note-text { flex: 1; min-width: 0; }
+.note-title { font-weight: 600; }
+.note.top > .note-row .note-title { font-size: 1.08rem; font-weight: 700; letter-spacing: -0.01em; }
+.note-sum { color: var(--muted); margin-left: 0.6rem; font-size: 0.9rem; }
+.note-mark { flex: none; align-self: center; width: 1.3rem; height: 1.3rem; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line-strong); color: var(--accent); font-size: 0.9rem; line-height: 1; transition: transform 0.3s var(--ease), background 0.2s, color 0.2s; }
+.note.seen > .note-row .note-mark { background: var(--accent-soft); border-color: var(--accent); }
+.note.open > .note-row .note-mark { transform: rotate(45deg); background: var(--accent); border-color: var(--accent); color: var(--white); }
+.note-focus { flex: none; font-size: 0.76rem; padding: 0.22rem 0.75rem; color: var(--muted); opacity: 0; transition: opacity 0.2s, border-color 0.18s, background 0.18s, color 0.18s; }
+.note-row:hover .note-focus, .note-focus:focus-visible, .note.open > .note-row .note-focus { opacity: 1; }
+.note-focus:hover { color: var(--accent); }
+
+.note-body { padding-top: 0.35rem; padding-bottom: 0.5rem; animation: rise 0.4s var(--ease); }
+.note-body > p { max-width: 70ch; margin-bottom: 0.6rem; }
+.note-points li { position: relative; padding-left: 1.2rem; margin: 0.25rem 0; max-width: 70ch; animation: rise 0.35s var(--ease) backwards; }
+.note-points li::before { content: ''; position: absolute; left: 0.1rem; top: 0.62em; width: 0.5rem; height: 1.5px; border-radius: var(--pill); background: var(--accent); }
+.note-example { background: var(--surface-2); border-radius: var(--radius-sm); padding: 0.7rem 1rem; margin: 0.75rem 0 0.25rem; white-space: pre-wrap; max-width: 70ch; }
+.note-example span { display: block; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: var(--accent); margin-bottom: 0.15rem; }
+.note-body .error { margin: 0.25rem 0; }
+
+@media (max-width: 1180px) {
+  .hub { column-gap: 2.25rem; grid-template-columns: minmax(0, 1fr) minmax(320px, 420px) minmax(0, 1fr); }
+  .hub-core { padding-inline: 1.6rem; }
+  .sheet { padding: 1.5rem 1.5rem 1.75rem; }
+}
