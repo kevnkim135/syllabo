@@ -3,7 +3,7 @@
 
 /* ---------- Airflow canvas: sticky, one viewport tall, behind everything ---------- */
 .h-air { position: sticky; top: 0; height: 0; margin: 0 -40px; z-index: 0; pointer-events: none; }
-.h-air canvas { position: absolute; left: 0; top: 0; width: 100%; -webkit-mask-image: linear-gradient(transparent, var(--forest) 90px, var(--forest) calc(100% - 70px), transparent); mask-image: linear-gradient(transparent, var(--forest) 90px, var(--forest) calc(100% - 70px), transparent); }
+.h-air canvas { position: absolute; left: 0; top: 0; width: 100%; -webkit-mask-image: linear-gradient(transparent, #000 90px, #000 calc(100% - 70px), transparent); mask-image: linear-gradient(transparent, #000 90px, #000 calc(100% - 70px), transparent); }
 
 /* ---------- Top: legend and the point the line grows from ---------- */
 .h-top { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 12px; }
@@ -15,9 +15,9 @@
 
 /* ---------- Event markers (legend and line share them): palette colors only ---------- */
 .h-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; flex: none; }
-.h-dot.discovery { background: var(--forest); }
-.h-dot.event { background: var(--violet); }
-.h-dot.figure { background: var(--lilac-200); box-shadow: inset 0 0 0 2.5px var(--violet); }
+.h-dot.discovery { background: var(--violet); }
+.h-dot.event { background: var(--lilac-300); }
+.h-dot.figure { background: var(--white); box-shadow: inset 0 0 0 2.5px var(--violet); }
 
 /* ---------- The line ---------- */
 .h-track { position: relative; z-index: 1; }
@@ -60,9 +60,9 @@
 .h-meta { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
 .h-type, .h-person { font-size: 0.74rem; border-radius: var(--pill); padding: 1px 10px; border: 1px solid transparent; }
 .h-type { font-weight: 700; letter-spacing: 0.02em; }
-.h-type.discovery { background: var(--forest); color: var(--white); }
-.h-type.event { background: var(--violet); color: var(--white); }
-.h-type.figure { background: var(--lilac-50); border-color: var(--violet); color: var(--forest); }
+.h-type.discovery { background: var(--violet); color: var(--white); }
+.h-type.event { background: var(--lilac-100); color: var(--plum); }
+.h-type.figure { background: var(--white); border-color: var(--violet); color: var(--violet); }
 .h-person { color: var(--muted); border-color: var(--line-strong); }
 .h-title { font-size: 1.04rem; letter-spacing: -0.015em; line-height: 1.3; }
 .h-detail { color: var(--muted); }

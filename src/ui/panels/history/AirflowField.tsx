@@ -31,7 +31,7 @@ export function AirflowField() {
     const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const css = getComputedStyle(canvas);
     const token = (name: string) => css.getPropertyValue(name).trim();
-    const palette = [token('--lilac-200'), token('--violet'), token('--lilac-200'), token('--forest')];
+    const palette = [token('--lilac-200'), token('--violet'), token('--lilac-200'), token('--lilac-300')];
 
     const streams: Stream[] = [];
     for (const dir of [-1, 1]) {

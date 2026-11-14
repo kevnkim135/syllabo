@@ -71,17 +71,22 @@ test('session: quick commands fire once on interim results, content waits for th
   assert.deepEqual(s.handle(0, 'go to history', true).actions, []); // not twice
   assert.deepEqual(out, [{ type: 'goto', section: 'timeline' }]);
 
+  // Whole sentences go to the assistant (which knows the lesson context) once they are final.
   out.length = 0;
   assert.deepEqual(s.handle(1, 'show me', false).actions, []);
   assert.deepEqual(s.handle(1, 'show me the model', false).actions, []); // could still become "the model of ..."
   assert.deepEqual(s.handle(1, 'show me the model of benzene', false).actions, []);
-  assert.deepEqual(s.handle(1, 'Show me the model of benzene.', true).actions, ['Building a model of "benzene"']);
-  assert.deepEqual(out, [{ type: 'generate', request: 'benzene' }]);
+  assert.deepEqual(s.handle(1, 'Show me the model of benzene.', true).actions, ['Thinking…']);
+  assert.deepEqual(out, [{ type: 'ask', text: 'Show me the model of benzene.' }]);
 
   out.length = 0;
-  s.handle(2, 'solve two x', false);
-  s.handle(2, 'solve two x plus three equals seven', true);
-  assert.deepEqual(out, [{ type: 'solve', question: 'two x plus three equals seven' }]);
+  s.handle(2, "let's switch to photosynthesis", false);
+  s.handle(2, "let's switch to photosynthesis instead", true);
+  assert.deepEqual(out, [{ type: 'ask', text: "let's switch to photosynthesis instead" }]);
+
+  out.length = 0;
+  s.handle(3, 'next model', true);
+  assert.deepEqual(out, [{ type: 'modelStep', step: 1 }]);
 });
 
 test('session: one-word interims wait, so "next" + "example" is one new example, not a section change', () => {
@@ -105,4 +110,10 @@ test('session: one-word interims wait, so "next" + "example" is one new example,
   // a new utterance with the same words fires again
   s.handle(3, 'go home', true);
   assert.equal(out.length, 2);
+});
+
+test('sentences that merely contain "next" or "go back" are not section changes', () => {
+  assert.deepEqual(parseVoiceCommand('go back to organic chemistry'), []);
+  assert.deepEqual(parseVoiceCommand("what's next in the history of physics"), []);
+  assert.deepEqual(parseVoiceCommand('go back'), [{ type: 'prev' }]);
 });

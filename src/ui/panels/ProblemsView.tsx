@@ -22,8 +22,8 @@ let lastAsk = 0; // id of the last spoken problem handed to the solve queue
  * then a practice set that branches from the topics they explored in the topic map.
  */
 export function ProblemsView({ problems }: { problems: Problem[] }) {
-  const { subject, focus, explored, solved, asked, loading } = useLesson();
-  const jobs = useJobs().filter((j) => j.subject === subject);
+  const { id: lessonId, subject, focus, explored, solved, asked, loading } = useLesson();
+  const jobs = useJobs().filter((j) => j.lessonId === lessonId);
   const [filter, setFilter] = useState<Filter>('all');
 
   // Spoken problems ("solve ...") arrive through the lesson store.

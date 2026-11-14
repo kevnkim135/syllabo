@@ -7,6 +7,7 @@ import { AskModel } from './AskModel';
 import { CameraRig } from './CameraRig';
 import { ControlBar } from './ControlBar';
 import { GestureGuide } from './GestureGuide';
+import { ModelGallery } from './ModelGallery';
 import { ModelLayers } from './ModelLayers';
 
 /** The 3D stage. It stays mounted for the whole lesson; `paused` stops rendering and input while hidden. */
@@ -38,6 +39,7 @@ export function VisualStage({ spec, paused = false }: { spec: VisualSpec; paused
             {visualRequest ? `Building ${visualRequest}…` : 'Building a new model…'}
           </div>
         )}
+        <ModelGallery />
         <ControlBar busy={busy} />
         <AskModel busy={busy} />
       </div>

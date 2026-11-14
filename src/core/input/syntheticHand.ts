@@ -14,6 +14,8 @@ export interface HandOptions {
   thumbCurl?: number;
   /** Thumb tip and index tip touch (the index finger bends to meet the thumb). */
   pinch?: boolean;
+  /** Thumb, index and middle tips meet (a three-finger pinch). */
+  gather?: boolean;
   /** Direction of the index finger in image-oriented axes (x right in the raw image, y down, z away from the camera). */
   indexDir?: Vec3;
   /** Wrist position in normalized image coords. */
@@ -22,6 +24,8 @@ export interface HandOptions {
   scale?: number;
   aspect?: number;
   label?: 'Left' | 'Right';
+  /** Turn the whole hand about the wrist (axis in image-oriented axes, angle in radians, right-hand rule). */
+  turn?: { axis: Vec3; angle: number };
 }
 
 const DEG = Math.PI / 180;
@@ -35,7 +39,8 @@ const FINGERS: [number, number, number, [number, number, number]][] = [
 
 export function makeHand(o: HandOptions = {}): HandInput {
   const curls = typeof o.curl === 'number' || o.curl === undefined ? Array(4).fill(o.curl ?? 0) : [...o.curl];
-  if (o.pinch) curls[0] = Math.max(curls[0], 0.45);
+  if (o.pinch || o.gather) curls[0] = Math.max(curls[0], 0.45);
+  if (o.gather) curls[1] = Math.max(curls[1], 0.45);
   const spread = o.spread ?? 1;
   const w: Vec3[] = [[0, 0, 0]];
 
@@ -69,10 +74,33 @@ export function makeHand(o: HandOptions = {}): HandInput {
     });
   });
 
-  if (o.pinch) {
-    // lay the thumb in a straight line from its base to the index fingertip
-    const tip = w[8];
+  if (o.pinch || o.gather) {
+    // lay the thumb in a straight line from its base to the index fingertip (gather: to the middle of
+    // the index and middle tips, and bring those two tips together there)
+    let tip = w[8];
+    if (o.gather) {
+      tip = [(w[8][0] + w[12][0]) / 2, (w[8][1] + w[12][1]) / 2, (w[8][2] + w[12][2]) / 2];
+      w[8] = [tip[0] - 0.004, tip[1], tip[2]];
+      w[12] = [tip[0] + 0.004, tip[1], tip[2]];
+    }
     for (let k = 1; k <= 3; k++) w[1 + k] = [w[1][0] + ((tip[0] - w[1][0]) * k) / 3, w[1][1] + ((tip[1] - w[1][1]) * k) / 3, w[1][2] + ((tip[2] - w[1][2]) * k) / 3];
+  }
+
+  if (o.turn && o.turn.angle) {
+    // Rodrigues' rotation of every point about the wrist (the origin)
+    const n = Math.hypot(...o.turn.axis);
+    const [kx, ky, kz] = o.turn.axis.map((v) => v / n);
+    const c = Math.cos(o.turn.angle);
+    const s = Math.sin(o.turn.angle);
+    for (let i = 0; i < w.length; i++) {
+      const [x, y, z] = w[i];
+      const d = kx * x + ky * y + kz * z;
+      w[i] = [
+        x * c + (ky * z - kz * y) * s + kx * d * (1 - c),
+        y * c + (kz * x - kx * z) * s + ky * d * (1 - c),
+        z * c + (kx * y - ky * x) * s + kz * d * (1 - c),
+      ];
+    }
   }
 
   const scale = o.scale ?? 2;

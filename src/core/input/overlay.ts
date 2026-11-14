@@ -14,7 +14,7 @@ export interface OverlayColors {
 export function readOverlayColors(el: Element): OverlayColors {
   const css = getComputedStyle(el);
   const v = (name: string) => css.getPropertyValue(name).trim();
-  return { left: v('--violet'), right: v('--forest'), dot: v('--white') };
+  return { left: v('--violet'), right: v('--lilac-300'), dot: v('--white') };
 }
 
 export function drawHands(canvas: HTMLCanvasElement, hands: TrackedHand[], connections: { start: number; end: number }[], colors: OverlayColors) {

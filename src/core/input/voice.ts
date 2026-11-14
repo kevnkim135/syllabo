@@ -1,5 +1,7 @@
-// Voice: mostly for CONTENT (open a section, ask for a model, solve a problem, new example).
-// Camera phrases stay as a fallback. `parseVoiceCommand` and `createVoiceSession` are pure and unit tested.
+// Voice. Short, unambiguous phrases (open a section, camera moves, next / new model) are handled right here
+// so they feel instant. Everything else, a whole sentence like "let's look at photosynthesis instead" or
+// "save this to my chemistry folder", goes to core/assistant.ts as an `ask`, which works out what it
+// means in the context of the current lesson (with Claude when a key is set, shared rules otherwise). `parseVoiceCommand` and `createVoiceSession` are pure and unit tested.
 import type { LessonKind } from '../../../shared/types';
 import { commands, type Command } from '../commands';
 
@@ -15,8 +17,8 @@ const CAMERA: [RegExp, Command][] = [
   [/front view|from the front/, { type: 'view', view: 'front' }],
   [/side view|from the side/, { type: 'view', view: 'side' }],
   [/reset|recenter|center/, { type: 'reset' }],
-  [/\bnext\b/, { type: 'next' }],
-  [/previous|go back/, { type: 'prev' }],
+  [/^next$/, { type: 'next' }],
+  [/^(?:previous|go back)$/, { type: 'prev' }],
 ];
 
 // ---- navigation: "go to history", "open the topic map", "problems", "go home", "next section" ----
@@ -31,7 +33,9 @@ const SECTIONS: [string, LessonKind][] = [
 const NAV: [RegExp, Command][] = [
   // The section name must END the phrase, so "show me the model of benzene" is a content request, not navigation.
   ...SECTIONS.map(([names, section]): [RegExp, Command] => [new RegExp(`^${GO}${names}${END}`), { type: 'goto', section }]),
-  [/\b(?:new|another|different|next|random|other) (?:example|model|one|molecule|shape|graph)\b|\bsomething else\b|\b(?:change|switch|swap) (?:the |this )?(?:example|model)\b|\btry another\b|\bsurprise me\b/, { type: 'newExample' }],
+  [/^(?:go to |show(?: me)? )?(?:the )?next (?:model|one)$|^swipe left$/, { type: 'modelStep', step: 1 }],
+  [/^(?:go (?:back )?to |show(?: me)? )?(?:the )?(?:previous|last) (?:model|one)$|^swipe right$/, { type: 'modelStep', step: -1 }],
+  [/\b(?:new|another|different|random|other) (?:example|model|molecule|shape|graph)\b|\bnext example\b|\b(?:another|a different) one\b|\bsomething else\b|\b(?:change|switch|swap) (?:the |this )?(?:example|model)\b|\btry another\b|\bsurprise me\b/, { type: 'newExample' }],
   [/^(?:(?:go|take me|return|back)(?: back)?(?: to)? )?(?:the )?home(?: page| screen)?$|\bgo home\b|^start over$|^(?:go to |open )?(?:the )?main (?:page|menu)$|^(?:start a )?new (?:lesson|subject)$/, { type: 'home' }],
   [/^(?:go |move |skip )?(?:to (?:the )?)?(?:next|forward)(?: section| tab| page)?$|^(?:scroll|move|go) down$/, { type: 'next' }],
   [/^(?:go |move )?(?:to (?:the )?)?(?:previous|back|last)(?: section| tab| page)?$|^go back$|^(?:scroll|move|go) up$/, { type: 'prev' }],
@@ -99,6 +103,12 @@ export function describeCommand(cmd: Command): string {
       return `${cmd.view[0].toUpperCase()}${cmd.view.slice(1)} view`;
     case 'reset':
       return 'Resetting the view';
+    case 'modelStep':
+      return cmd.step > 0 ? 'Next model' : 'Previous model';
+    case 'ask':
+      return 'Thinking…';
+    default:
+      return '';
   }
 }
 
@@ -125,8 +135,18 @@ export function createVoiceSession(emit: (cmd: Command) => void = commands.emit)
       fired.set(index, done);
       const actions: string[] = [];
       const mayGrow = !isFinal && (t.split(' ').length < 2 || GENERATE.test(t) || SOLVE.test(t) || SOLVE_KEEP.test(t) || /^(?:what|how)\b/.test(t));
-      for (const cmd of cmds) {
-        const content = cmd.type === 'generate' || cmd.type === 'solve';
+      // A finished sentence that is not a quick command goes to the assistant, which knows the lesson
+      // context (a content request, a topic change, saving, reopening a lesson...).
+      const quick = cmds.filter((c) => c.type !== 'generate' && c.type !== 'solve');
+      if (isFinal && !quick.length && t.split(' ').length >= 2 && done.size === 0) {
+        const ask: Command = { type: 'ask', text: transcript.trim() };
+        emit(ask);
+        actions.push(describeCommand(ask));
+        fired.delete(index);
+        return { transcript: transcript.trim(), final: isFinal, actions };
+      }
+      for (const cmd of quick) {
+        const content = false;
         if (!isFinal && (content || mayGrow)) continue;
         // If an interim result already acted on this utterance, the final result must not add a
         // second, different quick command (for example "next" and then "next example").

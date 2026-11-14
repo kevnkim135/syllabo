@@ -113,3 +113,41 @@ export interface LessonResponse<K extends LessonKind = LessonKind> {
   subject: string;
   data: LessonMap[K];
 }
+
+// ---- Voice assistant (POST /api/intent) ----
+/** What a spoken request should do, decided with the current lesson in mind. */
+export type VoiceIntent =
+  | { action: 'newLesson'; subject: string } // a different or unrelated subject: open a new lesson
+  | { action: 'focus'; topic: string } // a topic inside the current subject: narrow this lesson
+  | { action: 'widen' } // back to the whole subject
+  | { action: 'goto'; section: LessonKind }
+  | { action: 'model'; request: string } // build a new 3D model
+  | { action: 'newExample' }
+  | { action: 'modelStep'; step: 1 | -1 } // next / previous model in this lesson's gallery
+  | { action: 'solve'; question: string }
+  | { action: 'save'; folder?: string }
+  | { action: 'open'; title: string } // switch to an open lesson or reopen a saved one
+  | { action: 'library' }
+  | { action: 'home' }
+  | { action: 'none' };
+
+export interface IntentContext {
+  subject?: string;
+  focus?: string;
+  section?: LessonKind;
+  model?: string; // current model title
+  topics?: string[]; // topic titles and suggestions inside the current subject
+  open?: string[]; // titles of lessons open in tabs
+  saved?: string[]; // titles of saved lessons
+  folders?: string[];
+}
+
+export interface IntentRequest {
+  transcript: string;
+  context: IntentContext;
+}
+
+export interface IntentResult {
+  intent: VoiceIntent;
+  say: string; // short confirmation shown to the user
+}

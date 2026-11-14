@@ -11,7 +11,7 @@
 .problems .solve-row { display: flex; align-items: flex-end; gap: 0.4rem; padding: 0.4rem 0.4rem 0.4rem 1.2rem; }
 .problems .solve-row textarea { flex: 1; min-width: 0; resize: none; border: none; background: none; font: inherit; color: inherit; padding: 0.6rem 0; line-height: 1.5; font-size: 1rem; max-height: 150px; }
 .problems .solve-row textarea:focus-visible { outline: none; }
-.problems .solve-row textarea::placeholder { color: color-mix(in srgb, var(--forest) 45%, var(--white)); }
+.problems .solve-row textarea::placeholder { color: color-mix(in srgb, var(--plum) 42%, var(--white)); }
 .problems .solve-row button { border-radius: var(--pill); flex: none; }
 .problems .solve-row .attach { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--muted); }
 .problems .solve-row .attach:hover { color: var(--text); }
@@ -34,7 +34,7 @@
 .problems .problem header { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.55rem; }
 .problems .num { font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 1.1rem; }
 .problems .badge { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 9px; border-radius: var(--pill); background: var(--surface-2); border: 1px solid var(--line-strong); }
-.problems .badge.intro, .problems .badge.base { color: var(--forest); }
+.problems .badge.intro, .problems .badge.base { color: var(--violet); background: var(--lilac-50); }
 .problems .badge.core { color: var(--violet); }
 .problems .badge.edge, .problems .badge.yours { color: var(--white); background: var(--violet); border-color: var(--violet); }
 .problems .builds { font-size: 0.76rem; color: var(--violet); border: 1px dashed var(--line-strong); border-radius: var(--pill); padding: 1px 9px; }

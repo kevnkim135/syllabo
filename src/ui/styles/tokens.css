@@ -1,18 +1,22 @@
-/* Design tokens. The five palette colors are the only raw colors in the app; everything else derives from them. */
+/* Design tokens: white and shades of purple only (no green). Lighter purples carry most surfaces;
+   the deep plum exists only so text stays readable. Every UI color derives from these.
+   The 3D model's own objects (atoms, surfaces, force arrows) deliberately use their own colors. */
 :root {
   --white: #ffffff;
   --lilac-50: #f3eaff;
   --lilac-200: #d5c2ff;
   --violet: #8b6bd6;
-  --forest: #2f5d50;
+  --lilac-100: #e6d9ff;
+  --lilac-300: #b9a0f0;
+  --plum: #4a3784; /* text only */
 
   --bg: var(--white);
   --surface: var(--white);
   --surface-2: var(--lilac-50);
   --line: color-mix(in srgb, var(--lilac-200) 55%, var(--white));
   --line-strong: var(--lilac-200);
-  --text: var(--forest);
-  --muted: color-mix(in srgb, var(--forest) 78%, var(--white));
+  --text: var(--plum);
+  --muted: color-mix(in srgb, var(--plum) 72%, var(--white));
   --accent: var(--violet);
   --accent-soft: color-mix(in srgb, var(--violet) 12%, var(--white));
 

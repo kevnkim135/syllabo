@@ -5,7 +5,7 @@
   border: 1px solid var(--line); box-shadow: var(--shadow);
   background: radial-gradient(circle at 50% 42%, var(--white) 0%, var(--lilac-50) 72%, color-mix(in srgb, var(--lilac-200) 38%, var(--lilac-50)) 100%);
   --glass: color-mix(in srgb, var(--white) 62%, transparent);
-  --hairline: color-mix(in srgb, var(--forest) 12%, transparent);
+  --hairline: color-mix(in srgb, var(--violet) 18%, transparent);
   --glass-shadow: 0 10px 34px color-mix(in srgb, var(--violet) 18%, transparent), inset 0 1px 0 color-mix(in srgb, var(--white) 85%, transparent);
   --spring: cubic-bezier(0.3, 1.36, 0.5, 1);
 }
@@ -38,7 +38,7 @@
   width: calc(var(--wide) - var(--pad) * 2 - 2px); height: var(--cell); padding: 0 6px 0 0;
   border: none; background: none; border-radius: var(--radius-sm); text-align: left; white-space: nowrap;
 }
-.controlbar .ico { width: var(--cell); height: var(--cell); display: grid; place-items: center; flex: none; color: var(--forest); }
+.controlbar .ico { width: var(--cell); height: var(--cell); display: grid; place-items: center; flex: none; color: var(--violet); }
 .controlbar svg { width: 17px; height: 17px; display: block; }
 .controlbar .name { flex: 1; font-weight: 500; }
 .controlbar .name, .controlbar .segs, .controlbar .hint { opacity: 0; transform: translateX(-6px); transition: opacity 0.2s var(--ease), transform 0.45s var(--spring); }
@@ -50,10 +50,10 @@
 .controlbar button { transition: background 0.18s, color 0.18s, transform 0.25s var(--spring); }
 .controlbar button.action:hover { background: color-mix(in srgb, var(--violet) 12%, transparent); }
 .controlbar button.action:active { transform: scale(0.98); }
-.controlbar .segs { display: flex; gap: 2px; padding: 2px; border-radius: 10px; background: color-mix(in srgb, var(--forest) 7%, transparent); }
-.controlbar .seg { width: 30px; height: 26px; padding: 0; display: grid; place-items: center; border: none; border-radius: 8px; background: none; color: var(--forest); }
+.controlbar .segs { display: flex; gap: 2px; padding: 2px; border-radius: 10px; background: var(--lilac-50); }
+.controlbar .seg { width: 30px; height: 26px; padding: 0; display: grid; place-items: center; border: none; border-radius: 8px; background: none; color: var(--violet); }
 .controlbar .seg.text { width: auto; padding: 0 9px; font-size: 0.78rem; text-transform: capitalize; }
-.controlbar .seg:hover { background: var(--white); box-shadow: 0 1px 3px color-mix(in srgb, var(--forest) 18%, transparent); }
+.controlbar .seg:hover { background: var(--white); box-shadow: 0 1px 3px color-mix(in srgb, var(--violet) 22%, transparent); }
 .controlbar .seg:active { transform: scale(0.9); color: var(--violet); }
 .controlbar .seg svg { width: 15px; height: 15px; }
 .controlbar button:focus-visible { outline-offset: -2px; }

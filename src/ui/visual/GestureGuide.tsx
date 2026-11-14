@@ -1,9 +1,10 @@
 // Mirrors the gesture map the input agent implements (TASKS.md, "Agent 2: input").
 const GESTURES: [string, string][] = [
-  ['Zoom', 'One hand: open it wide or draw the fingers together.'],
+  ['Zoom in', 'Pinch thumb, index and middle fingertips together and hold. It keeps zooming, faster the longer you hold; relax to stop.'],
+  ['Zoom out', 'Spread thumb, index and middle apart with ring and pinky folded, and hold. Relax to stop.'],
   ['New example', 'One hand: twirl your index finger in a circle.'],
-  ['Rotate', 'Pinch thumb and index on your left hand to hold the model, then turn your right index finger. The model turns about the same axis.'],
-  ['Next / previous', 'A hard, fast open-hand swipe up or down changes section.'],
+  ['Rotate', 'Pinch with one hand to grab the model, then draw circles with your other index finger. Circle at one height to spin around the vertical axis, toward and away from the camera for the horizontal axis, flat to the screen for the axis out of the screen.'],
+  ['Next / previous model', 'A hard, fast open-hand swipe left or right flips through the models built in this lesson.'],
   ['Home', 'Hold both fists closed for a moment.'],
 ];
 

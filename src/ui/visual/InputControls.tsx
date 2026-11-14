@@ -3,24 +3,27 @@ import { GESTURE, GESTURE_GUIDE, startGestures, type GestureLabel } from '../../
 import { startKeyboard } from '../../core/input/keyboard';
 import { startVoice, type VoiceEvent } from '../../core/input/voice';
 import { useLesson } from '../../core/lesson';
+import { useAssistant } from '../../core/assistant';
 
 // What the chip on the camera preview says for each recognized gesture.
 const GESTURE_TEXT: Record<GestureLabel, string> = {
   none: 'Show a hand',
   idle: 'Hands seen',
-  hand: 'Open hand: zoom or swipe',
+  hand: 'Open hand: swipe left or right through models',
+  gather: 'Three-finger pinch: hold to zoom in',
+  spread: 'Three fingers spread: hold to zoom out',
   zoomIn: 'Zooming in',
   zoomOut: 'Zooming out',
   point: 'Pointing: twirl for a new example',
   newExample: 'New example',
-  clutch: 'Clutch held: point your right index finger',
+  clutch: 'Pinch held: draw circles with your other index finger',
   rotate: 'Rotating',
   fists: 'Hold both fists to go home',
   home: 'Home',
-  next: 'Next section',
-  prev: 'Previous section',
+  modelNext: 'Next model',
+  modelPrev: 'Previous model',
 };
-const EVENTS: GestureLabel[] = ['newExample', 'home', 'next', 'prev'];
+const EVENTS: GestureLabel[] = ['newExample', 'home', 'modelNext', 'modelPrev'];
 const SWAP_KEY = 'lessonlab.swapHands';
 
 const icon = (children: ReactNode) => (
@@ -51,6 +54,7 @@ const ICONS = {
  * above it; the preview can be enlarged on demand.
  */
 export function InputControls() {
+  const assistant = useAssistant();
   const inLesson = !!useLesson().subject;
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -192,7 +196,13 @@ export function InputControls() {
           {heard ? (
             <>
               <p className={heard.final ? '' : 'interim'}>“{heard.transcript}”</p>
-              {heard.actions.length > 0 ? <p className="did">{heard.actions.join(' · ')}</p> : heard.final && <p className="muted">No command heard</p>}
+              {assistant && assistant.heard === heard.transcript ? (
+                <p className={assistant.state === 'unsure' ? 'muted' : assistant.state === 'thinking' ? 'did pulse' : 'did'}>{assistant.say}</p>
+              ) : heard.actions.length > 0 ? (
+                <p className="did">{heard.actions.join(' · ')}</p>
+              ) : (
+                heard.final && <p className="muted">No command heard</p>
+              )}
             </>
           ) : (
             <p className="muted pulse">Listening…</p>

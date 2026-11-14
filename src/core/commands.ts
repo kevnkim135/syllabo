@@ -16,6 +16,8 @@ export type Command =
   | { type: 'home' }
   // ---- content (handled by core/lesson.ts) ----
   | { type: 'newExample' } // a different random model
+  | { type: 'modelStep'; step: 1 | -1 } // next / previous model in this lesson's gallery (swipe left / right)
+  | { type: 'ask'; text: string } // a free-form spoken request: core/assistant.ts works out what it means
   | { type: 'generate'; request: string } // "show me benzene", "graph x squared minus y squared"
   | { type: 'solve'; question: string }; // spoken or typed problem
 

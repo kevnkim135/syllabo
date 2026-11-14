@@ -1,8 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { ExpandRequest, LessonKind, LessonMap, LessonRequest, Problem, ScopeInfo, SolveRequest, TopicDetail } from '../shared/types';
-import { buildExpandPrompt, buildPrompt, buildScopePrompt, buildSolvePrompt, SYSTEM } from './prompts';
+import type { ExpandRequest, IntentRequest, IntentResult, LessonKind, LessonMap, LessonRequest, Problem, ScopeInfo, SolveRequest, TopicDetail } from '../shared/types';
+import { ruleIntent } from '../shared/intentRules';
+import { buildExpandPrompt, buildIntentPrompt, buildPrompt, buildScopePrompt, buildSolvePrompt, SYSTEM } from './prompts';
 import { expandFixture, fixture, scopeFixture, solveFixture } from './fixtures';
-import { validate, validateDetail, validateProblem, validateScope } from './validate';
+import { validate, validateDetail, validateIntent, validateProblem, validateScope } from './validate';
 
 let client: Anthropic | null = null;
 
@@ -69,14 +70,29 @@ export function solveProblem(req: SolveRequest): Promise<Problem | undefined> {
   return ask(content, validateProblem, 'solve');
 }
 
-async function ask<T>(first: string | Anthropic.ContentBlockParam[], check: (raw: unknown) => T | undefined, label: string) {
+/**
+ * Understand a spoken request in the context of the current lesson. Uses the model when a key is set,
+ * and the shared rules otherwise or if the model call fails, so voice always does something sensible.
+ */
+export async function resolveIntent(req: IntentRequest): Promise<IntentResult> {
+  if (usingMock()) return ruleIntent(req.transcript, req.context);
+  try {
+    const result = await ask(buildIntentPrompt(req), validateIntent, 'intent', 1024);
+    if (result) return result.say ? result : { ...result, say: ruleIntent(req.transcript, req.context).say };
+  } catch (e) {
+    console.warn('[llm] intent failed, using rules:', (e as Error).message);
+  }
+  return ruleIntent(req.transcript, req.context);
+}
+
+async function ask<T>(first: string | Anthropic.ContentBlockParam[], check: (raw: unknown) => T | undefined, label: string, maxTokens = 8192) {
   client ??= new Anthropic();
   const content: Anthropic.ContentBlockParam[] = typeof first === 'string' ? [{ type: 'text', text: first }] : [...first];
   // One retry: on invalid output, tell the model what went wrong.
   for (let attempt = 0; attempt < 2; attempt++) {
     const msg = await client.messages.create({
       model: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-5-5',
-      max_tokens: 8192,
+      max_tokens: maxTokens,
       system: SYSTEM,
       messages: [{ role: 'user', content }],
     });

@@ -118,7 +118,15 @@ export function openness(lm: Pt[]) {
   return TIPS.reduce((s, t) => s + dist3(lm[t], palm) + dist3(lm[t], tips), 0) / 5 / handSize(lm);
 }
 
-export type Pose = 'open' | 'fist' | 'point' | 'pinch' | 'other';
+/**
+ * open   all four fingers straight (swipe)
+ * fist   all four curled
+ * point  index straight, the rest curled (twirl; steering finger for rotate)
+ * pinch  thumb tip on index tip (the rotate clutch)
+ * gather thumb, index AND middle tips together: a three-finger pinch (zoom in)
+ * spread thumb, index and middle held apart with ring and pinky folded (zoom out)
+ */
+export type Pose = 'open' | 'fist' | 'point' | 'pinch' | 'gather' | 'spread' | 'other';
 
 export const POSE = {
   extended: 0.85, // straightness above this = finger extended
@@ -127,6 +135,12 @@ export const POSE = {
   pinchOn: 0.28, // pinch ratio to start a pinch
   pinchOff: 0.42, // pinch ratio to end it (hysteresis)
   uniform: 0.25, // max spread of the four straightness values for "all fingers move together"
+  gatherMiddle: 0.4, // thumb tip to middle tip (hand sizes) for a three-finger pinch; off at +0.12
+  spreadStraight: 0.8, // index and middle straighter than this for "spread"
+  spreadFolded: 0.8, // ring and pinky must be bent more than this (straightness below it) for "spread"
+  spreadThumb: 0.6, // thumb tip to index tip (hand sizes) at least this for "spread"
+  spreadThumbOut: 0.85, // thumb tip to ring knuckle (hand sizes): the thumb sticks out, not tucked like a peace sign
+  spreadFingers: 0.28, // index tip to middle tip (hand sizes) at least this for "spread"
   hintScore: 0.6, // minimum MediaPipe gesture score to use as a tie-breaker
 };
 
@@ -139,6 +153,7 @@ export interface HandShape {
   openness: number;
   pinch: number; // pinch ratio
   pinching: boolean; // with hysteresis
+  gathering: boolean; // three-finger pinch, with hysteresis
   /** True when the four fingers are equally bent: an open hand, a fist or anything between (the zoom gesture). */
   uniform: boolean;
 }
@@ -147,14 +162,27 @@ export interface HandShape {
  * Classify one hand. Geometry decides; the MediaPipe gesture (`hint`) only breaks ties when the geometry
  * says "other". `wasPinching` gives the pinch its hysteresis. Order matters: fist, pinch, point, open.
  */
-export function classifyHand(lm: Pt[], wasPinching = false, hint?: { name: string; score: number }): HandShape {
+export function classifyHand(lm: Pt[], wasPinching = false, hint?: { name: string; score: number }, wasGathering = false): HandShape {
   const straight = fingerStraightness(lm);
   const pinch = pinchRatio(lm);
   const isFist = straight.every((s) => s < POSE.fist);
   const pinching = !isFist && pinch < (wasPinching ? POSE.pinchOff : POSE.pinchOn);
+  const size = handSize(lm);
+  const middleGap = dist3(lm[4], lm[12]) / size;
+  const gathering = pinching && middleGap < POSE.gatherMiddle + (wasGathering ? 0.12 : 0);
+  const spreading =
+    straight[0] > POSE.spreadStraight &&
+    straight[1] > POSE.spreadStraight &&
+    straight[2] < POSE.spreadFolded &&
+    straight[3] < POSE.spreadFolded &&
+    pinch > POSE.spreadThumb &&
+    dist3(lm[4], lm[13]) / size > POSE.spreadThumbOut &&
+    dist3(lm[8], lm[12]) / size > POSE.spreadFingers;
   let pose: Pose = 'other';
   if (isFist) pose = 'fist';
+  else if (gathering) pose = 'gather';
   else if (pinching) pose = 'pinch';
+  else if (spreading) pose = 'spread';
   else if (straight[0] > POSE.extended && straight.slice(1).every((s) => s < POSE.curled)) pose = 'point';
   else if (straight.every((s) => s > POSE.extended)) pose = 'open';
   else if (hint && hint.score >= POSE.hintScore && HINTS[hint.name]) {
@@ -163,7 +191,7 @@ export function classifyHand(lm: Pt[], wasPinching = false, hint?: { name: strin
     if (h !== 'point' || straight[0] > POSE.curled) pose = h;
   }
   const uniform = Math.max(...straight) - Math.min(...straight) < POSE.uniform;
-  return { pose, straight, openness: openness(lm), pinch, pinching, uniform };
+  return { pose, straight, openness: openness(lm), pinch, pinching, gathering, uniform };
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -214,6 +242,116 @@ export function rotationBetween(from: Vec3, to: Vec3): { axis: Vec3; angle: numb
 }
 
 // ---------------------------------------------------------------------------------------------------
+// Fingertip in 3D (the two-hand rotate traces circles with it)
+// ---------------------------------------------------------------------------------------------------
+/**
+ * Index fingertip position in view space, in metres from the camera's optical axis (z = distance from
+ * the camera, so +z points at the user like the view axis).
+ *
+ * World landmarks are metric but centred on the hand, so they cannot see the whole hand moving toward
+ * the camera. Image landmarks see the hand's position but not its distance. So: fit the weak-perspective
+ * scale s (frame heights per metre) that maps world x,y onto image x,y. World landmarks keep the camera's
+ * orientation, so this fit does not shrink when the hand tilts (unlike measuring one bone in the image).
+ * Distance = focal / s; the hand centre's lateral position = image offset / s; the fingertip is that
+ * centre plus its world offset. Without world landmarks, an average hand size stands in.
+ */
+export function tipPosition(image: Pt[], world: Pt[] | undefined, aspect: number, focal: number): Vec3 {
+  const cx = 0.5 * aspect;
+  const cy = 0.5;
+  const img = image.map((p) => ({ x: p.x * aspect, y: p.y }));
+  if (!world) {
+    const s = dist(img[0], img[9]) / 0.09 || 1e-6; // wrist to middle knuckle is about 9 cm
+    return toView([(img[8].x - cx) / s, (img[8].y - cy) / s, focal / s]);
+  }
+  const n = world.length;
+  const mi = { x: img.reduce((a, p) => a + p.x, 0) / n, y: img.reduce((a, p) => a + p.y, 0) / n };
+  const mw = { x: world.reduce((a, p) => a + p.x, 0) / n, y: world.reduce((a, p) => a + p.y, 0) / n };
+  let num = 0;
+  let den = 0;
+  for (let i = 0; i < n; i++) {
+    const wx = world[i].x - mw.x;
+    const wy = world[i].y - mw.y;
+    num += (img[i].x - mi.x) * wx + (img[i].y - mi.y) * wy;
+    den += wx * wx + wy * wy;
+  }
+  const s = num / (den || 1e-12) || 1e-6;
+  // where the world origin lands in the image, then back out to metres
+  const ox = mi.x - s * mw.x;
+  const oy = mi.y - s * mw.y;
+  const t = world[8];
+  return toView([(ox - cx) / s + t.x, (oy - cy) / s + t.y, focal / s + (t.z ?? 0)]);
+}
+
+/**
+ * How a 3D path circulates. `area` is the path's vector area: its direction is the normal of the plane
+ * the path circles in (right-hand rule: counter-clockwise when the vector points at you) and its length
+ * the area swept. `coherence` (0..1) is how much of the motion is circling rather than back-and-forth,
+ * and `radius` the mean distance from the centroid.
+ */
+export function circulation(path: Vec3[]): { area: Vec3; coherence: number; radius: number; centre: Vec3 } {
+  const n = path.length;
+  const centre: Vec3 = [0, 1, 2].map((k) => path.reduce((a, p) => a + p[k], 0) / (n || 1)) as Vec3;
+  const sub3 = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const area: Vec3 = [0, 0, 0];
+  let swept = 0;
+  let radius = 0;
+  for (let i = 0; i < n; i++) radius += norm(sub3(path[i], centre)) / n;
+  for (let i = 0; i + 1 < n; i++) {
+    const r = sub3(path[i], centre);
+    const d = sub3(path[i + 1], path[i]);
+    const c = cross(r, d);
+    area[0] += c[0] / 2;
+    area[1] += c[1] / 2;
+    area[2] += c[2] / 2;
+    swept += (norm(r) * norm(d)) / 2;
+  }
+  return { area, coherence: swept > 0 ? norm(area) / swept : 0, radius, centre };
+}
+
+/** Index of the dominant axis of `v`, keeping `current` unless another axis is `margin` times stronger. */
+export function dominantAxis(v: Vec3, current: number | null, margin = 1.5): number {
+  const m = v.map(Math.abs);
+  const best = m[0] >= m[1] && m[0] >= m[2] ? 0 : m[1] >= m[2] ? 1 : 2;
+  if (current !== null && best !== current && m[best] < m[current] * margin) return current;
+  return best;
+}
+
+/**
+ * Least-squares circle through 2D points (Kasa fit): the centre, or null when the points are nearly
+ * collinear. Unlike the centroid, this stays on the true centre when the points cover only part of a circle.
+ */
+export function fitCircle(pts: [number, number][]): [number, number] | null {
+  // minimise sum (x^2 + y^2 + D x + E y + F)^2 -> normal equations in D, E, F
+  let sxx = 0, sxy = 0, syy = 0, sx = 0, sy = 0, sxz = 0, syz = 0, sz = 0;
+  for (const [x, y] of pts) {
+    const z = x * x + y * y;
+    sxx += x * x; sxy += x * y; syy += y * y; sx += x; sy += y; sxz += x * z; syz += y * z; sz += z;
+  }
+  const n = pts.length;
+  const A = [[sxx, sxy, sx], [sxy, syy, sy], [sx, sy, n]];
+  const b = [-sxz, -syz, -sz];
+  const det = (m: number[][]) => m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+  const d = det(A);
+  const scale = Math.max(sxx, syy, 1e-30) ** 2 * n;
+  if (Math.abs(d) < 1e-9 * scale) return null;
+  const col = (k: number) => A.map((row, i) => row.map((v, j) => (j === k ? b[i] : v)));
+  const D = det(col(0)) / d;
+  const E = det(col(1)) / d;
+  return [-D / 2, -E / 2];
+}
+
+/** Signed angle from a to b about unit `axis`, ignoring their components along it. */
+export function angleAbout(axis: Vec3, a: Vec3, b: Vec3): number {
+  const flat = (v: Vec3): Vec3 => {
+    const d = dot(v, axis);
+    return [v[0] - d * axis[0], v[1] - d * axis[1], v[2] - d * axis[2]];
+  };
+  const fa = flat(a);
+  const fb = flat(b);
+  return Math.atan2(dot(cross(fa, fb), axis), dot(fa, fb));
+}
+
+// ---------------------------------------------------------------------------------------------------
 // Twirl (fingertip traces a circle)
 // ---------------------------------------------------------------------------------------------------
 /**
@@ -258,30 +396,34 @@ export interface SwipeParams {
   windowMs: number; // the whole swipe must fit in this
   minTravel: number; // frame heights
   minSpeed: number; // frame heights per second, averaged over the swipe
-  maxSideways: number; // |dx| must be below this fraction of |dy|
+  maxSideways: number; // off-axis travel must be below this fraction of the on-axis travel
   minOpen: number; // fraction of the swipe's frames that must be an open hand
+  axis?: 'x' | 'y'; // 'y' (default) = up / down, 'x' = left / right
 }
 
 /**
  * Looks back from the newest sample for a start point that makes a long, fast, mostly vertical move.
  * Returns 'up' (image y decreased: the hand moved up) or 'down', else null.
  */
-export function detectSwipe(samples: SwipeSample[], p: SwipeParams): 'up' | 'down' | null {
+export function detectSwipe(samples: SwipeSample[], p: SwipeParams): 'up' | 'down' | 'left' | 'right' | null {
   const last = samples[samples.length - 1];
   if (!last) return null;
+  const horizontal = p.axis === 'x';
   let open = last.open ? 1 : 0;
   for (let j = samples.length - 2; j >= 0; j--) {
     const s = samples[j];
     const dt = last.t - s.t;
     if (dt > p.windowMs) break;
     open += s.open ? 1 : 0;
-    const dy = last.y - s.y;
-    const dx = last.x - s.x;
-    if (dt <= 0 || Math.abs(dy) < p.minTravel) continue;
-    if (Math.abs(dy) / (dt / 1000) < p.minSpeed) continue;
-    if (Math.abs(dx) > p.maxSideways * Math.abs(dy)) continue;
+    const along = horizontal ? last.x - s.x : last.y - s.y;
+    const across = horizontal ? last.y - s.y : last.x - s.x;
+    if (dt <= 0 || Math.abs(along) < p.minTravel) continue;
+    if (Math.abs(along) / (dt / 1000) < p.minSpeed) continue;
+    if (Math.abs(across) > p.maxSideways * Math.abs(along)) continue;
     if (open / (samples.length - j) < p.minOpen) continue;
-    return dy < 0 ? 'up' : 'down';
+    // The raw frame is unmirrored: image x grows toward the USER's left.
+    if (horizontal) return along > 0 ? 'left' : 'right';
+    return along < 0 ? 'up' : 'down';
   }
   return null;
 }

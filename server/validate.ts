@@ -1,6 +1,6 @@
 // Runtime validation of model output against shared/types.ts. Returns a cleaned value or undefined.
 import { evaluate } from 'mathjs';
-import type { LessonKind, LessonMap, Problem, ScopeInfo, TopicDetail, TopicNode, VisualSpec } from '../shared/types';
+import { LESSON_KINDS, type IntentResult, type LessonKind, type LessonMap, type Problem, type ScopeInfo, type TopicDetail, type TopicNode, type VisualSpec, type VoiceIntent } from '../shared/types';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
@@ -76,6 +76,26 @@ export function validateScope(raw: unknown): ScopeInfo | undefined {
     overview: raw.overview,
     suggestions: Array.isArray(raw.suggestions) ? raw.suggestions.filter(str).slice(0, 8) : [],
   };
+}
+
+/** A voice intent from the model; anything malformed becomes "none". */
+export function validateIntent(raw: unknown): IntentResult | undefined {
+  if (!isObj(raw) || !isObj(raw.intent)) return undefined;
+  const i = raw.intent;
+  const s = (v: unknown) => (str(v) ? v.trim().slice(0, 200) : undefined);
+  let intent: VoiceIntent | undefined;
+  switch (i.action) {
+    case 'newLesson': intent = s(i.subject) ? { action: 'newLesson', subject: s(i.subject)! } : undefined; break;
+    case 'focus': intent = s(i.topic) ? { action: 'focus', topic: s(i.topic)! } : undefined; break;
+    case 'model': intent = s(i.request) ? { action: 'model', request: s(i.request)! } : undefined; break;
+    case 'solve': intent = s(i.question) ? { action: 'solve', question: s(i.question)! } : undefined; break;
+    case 'open': intent = s(i.title) ? { action: 'open', title: s(i.title)! } : undefined; break;
+    case 'goto': intent = LESSON_KINDS.includes(i.section as LessonKind) ? { action: 'goto', section: i.section as LessonKind } : undefined; break;
+    case 'modelStep': intent = { action: 'modelStep', step: i.step === -1 ? -1 : 1 }; break;
+    case 'save': intent = { action: 'save', folder: s(i.folder) }; break;
+    case 'widen': case 'newExample': case 'library': case 'home': case 'none': intent = { action: i.action }; break;
+  }
+  return intent ? { intent, say: s(raw.say) ?? '' } : undefined;
 }
 
 export const validateProblem = (raw: unknown): Problem | undefined => validate('problems', [raw])?.[0];

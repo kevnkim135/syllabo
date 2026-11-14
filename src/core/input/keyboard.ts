@@ -20,6 +20,8 @@ export function startKeyboard(target: Window = window) {
       f: { type: 'view', view: 'front' },
       s: { type: 'view', view: 'side' },
       r: { type: 'reset' },
+      '[': { type: 'modelStep', step: -1 },
+      ']': { type: 'modelStep', step: 1 },
     };
     const cmd = map[e.key] ?? map[e.key.toLowerCase()];
     if (!cmd || e.metaKey || e.ctrlKey) return;

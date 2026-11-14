@@ -3,7 +3,6 @@ import * as THREE from 'three';
 import type { MoleculeSpec } from '../../../shared/types';
 import { element } from '../../utils/elements';
 import { Label } from './Label';
-import { mix } from './palette';
 
 const SCALE = 1.6; // angstroms -> scene units
 
@@ -48,14 +47,13 @@ function Bond({ from, to, order }: { from: THREE.Vector3; to: THREE.Vector3; ord
     return { len, quat, mid: from.clone().add(to).multiplyScalar(0.5), offsets };
   }, [from, to, order]);
 
-  const bondColor = useMemo(() => mix('forest', 'white', 0.55), []);
 
   return (
     <group>
       {offsets.map((o, i) => (
         <mesh key={i} position={mid.clone().add(o)} quaternion={quat}>
           <cylinderGeometry args={[0.05, 0.05, len, 12]} />
-          <meshStandardMaterial color={bondColor} roughness={0.5} />
+          <meshStandardMaterial color="#b4b4bc" roughness={0.5} />
         </mesh>
       ))}
     </group>

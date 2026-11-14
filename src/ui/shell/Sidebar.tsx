@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { lesson, SECTIONS, useLesson, type Section } from '../../core/lesson';
+import { lesson, SECTIONS, useLesson, useWorkspace, type Section } from '../../core/lesson';
+import { useLibrary } from '../../core/library';
 
 export const SECTION_LABELS: Record<Section, string> = {
   visual: 'Interactive model',
@@ -26,7 +27,9 @@ const ICONS: Record<Section, ReactNode> = {
 };
 
 export function Sidebar() {
-  const { section, loading } = useLesson();
+  const { section, loading, subject } = useLesson();
+  const { view } = useWorkspace();
+  const saved = useLibrary().lessons.length;
   return (
     <nav className="sidebar" aria-label="Lesson sections">
       <button className="brand" onClick={lesson.home} title="Home (0)">
@@ -34,14 +37,26 @@ export function Sidebar() {
         <span className="label">LessonLab</span>
       </button>
       {SECTIONS.map((k, i) => (
-        <button key={k} className={`nav ${k === section ? 'on' : ''}`} aria-current={k === section ? 'page' : undefined} onClick={() => lesson.goto(k)}>
+        <button
+          key={k}
+          className={`nav ${k === section && view === 'lesson' ? 'on' : ''}`}
+          aria-current={k === section && view === 'lesson' ? 'page' : undefined}
+          disabled={!subject}
+          onClick={() => lesson.goto(k)}
+        >
           {ICONS[k]}
           <span className="label">{SECTION_LABELS[k]}</span>
           {loading[k] ? <span className="spinner" aria-label="loading" /> : <span className="key">{i + 1}</span>}
         </button>
       ))}
+      <div className="sidebar-sep" />
+      <button className={`nav ${view === 'library' ? 'on' : ''}`} aria-current={view === 'library' ? 'page' : undefined} onClick={lesson.showLibrary}>
+        {icon(<path d="M4 4.5h4.5l1.5 2H16a.5.5 0 0 1 .5.5v8a.5.5 0 0 1-.5.5H4a.5.5 0 0 1-.5-.5V5a.5.5 0 0 1 .5-.5Z" />)}
+        <span className="label">Library</span>
+        {saved > 0 && <span className="key">{saved}</span>}
+      </button>
       <span className="spacer" />
-      <p className="hint">Say "go to history" or "show me benzene". Press 0 for home.</p>
+      <p className="hint">Try saying "let's learn about photosynthesis" or "save this lesson".</p>
     </nav>
   );
 }

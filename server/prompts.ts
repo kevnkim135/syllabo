@@ -1,4 +1,4 @@
-import type { ExpandRequest, LessonKind, LessonRequest, SolveRequest } from '../shared/types';
+import type { ExpandRequest, IntentRequest, LessonKind, LessonRequest, SolveRequest } from '../shared/types';
 
 export const SYSTEM = `You are an expert teacher and curriculum designer.
 Be accurate and prefer well-established facts, names and dates.
@@ -83,4 +83,40 @@ Produce a JSON object:
  "example": "one concrete worked example or analogy (optional)",
  "subtopics": [{"title": "...", "summary": "one sentence"}]}
 Give 3-5 subtopics that go one level deeper than "${topic}".`;
+}
+
+export function buildIntentPrompt({ transcript, context: c }: IntentRequest) {
+  const list = (xs?: string[]) => (xs?.length ? xs.map((x) => `"${x}"`).join(', ') : 'none');
+  return `You turn a student's spoken request into ONE action for LessonLab, a lesson app with four sections:
+the interactive 3D model ("visual"), history ("timeline"), the topic map ("topics") and practice problems ("problems").
+
+Current state:
+- Lesson subject: ${c.subject ? `"${c.subject}"` : 'none (home page)'}${c.focus ? `, narrowed to "${c.focus}"` : ''}
+- Section on screen: ${c.section ?? 'none'}
+- Current 3D model: ${c.model ? `"${c.model}"` : 'none'}
+- Topics inside this subject: ${list(c.topics)}
+- Lessons open in tabs: ${list(c.open)}
+- Saved lessons: ${list(c.saved)}
+- Folders: ${list(c.folders)}
+
+The student said: "${transcript}"
+
+Actions (pick exactly one):
+- {"action": "focus", "topic": "..."}: the student wants to dig into a topic that is PART OF the current subject.
+- {"action": "newLesson", "subject": "..."}: the student wants a DIFFERENT subject, or a topic unrelated to the current one, or there is no lesson yet. Use a clean subject name.
+- {"action": "widen"}: back from a narrowed topic to the whole subject.
+- {"action": "goto", "section": "visual" | "timeline" | "topics" | "problems"}
+- {"action": "model", "request": "..."}: build a specific 3D model (a molecule, a graph or surface, a physics diagram, a model of a real-world problem).
+- {"action": "newExample"}: a different example model for the current topic.
+- {"action": "modelStep", "step": 1 | -1}: next or previous model already built in this lesson.
+- {"action": "solve", "question": "..."}: solve a specific problem the student states; restate it as written math or text.
+- {"action": "save", "folder": "..."}: save the current lesson, optionally into a named folder (omit folder if none named).
+- {"action": "open", "title": "..."}: switch to an open lesson or reopen a saved one; title must be copied exactly from the open or saved lists.
+- {"action": "library"}: show saved lessons and folders.
+- {"action": "home"}
+- {"action": "none"}: chit-chat, or nothing actionable.
+
+Decide "focus" vs "newLesson" by meaning, not shared words: "photosynthesis" during "organic chemistry" is a new lesson; "SN2 reactions" during "organic chemistry" is a focus.
+
+Respond with ONLY a JSON object: {"intent": <one action object>, "say": "a short confirmation of what you are doing, under 10 words"}`;
 }

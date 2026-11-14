@@ -192,3 +192,58 @@ test('swipe: hard fast vertical moves only', () => {
   assert.equal(detectSwipe(stroke(-0.4, 180, { open: false }), SWIPE), null); // not an open hand
   assert.equal(detectSwipe([], SWIPE), null);
 });
+
+// ---------------- three-finger poses, fingertip in 3D, circulation ----------------
+import { angleAbout, circulation, dominantAxis, tipPosition, toView } from '../src/utils/gestureMath';
+
+test('poses: three-finger pinch is "gather", three fingers spread with the thumb out is "spread"', () => {
+  assert.equal(classifyHand(world({ gather: true })).pose, 'gather');
+  assert.equal(classifyHand(world({ gather: true, curl: [0, 0, 0.6, 0.6] })).pose, 'gather');
+  assert.equal(classifyHand(world({ curl: [0, 0, 1, 1], thumbCurl: 0 })).pose, 'spread');
+  assert.equal(classifyHand(world({ curl: [0, 0, 1, 1], thumbCurl: 1 })).pose, 'other'); // peace sign, thumb tucked
+  assert.equal(classifyHand(world({ curl: 0 })).pose, 'open'); // all five out is an open hand, not "spread"
+});
+
+test('tipPosition recovers where the fingertip is in 3D, and the hand tilting does not move it', () => {
+  const F = 0.9;
+  const aspect = 4 / 3;
+  for (const P of [[0, 0, 0.5], [0.1, -0.05, 0.4], [-0.08, 0.06, 0.7]] as [number, number, number][]) {
+    for (const turn of [undefined, { axis: [1, 0, 0] as [number, number, number], angle: 0.5 }, { axis: [0, 1, 0] as [number, number, number], angle: -0.6 }]) {
+      const s = F / P[2];
+      const h = makeHand({ curl: [0, 1, 1, 1], scale: s, aspect, at: [0.5 + (-P[0] * s) / aspect, 0.5 - P[1] * s], turn });
+      const tip = tipPosition(h.image, h.world, aspect, F);
+      const w8 = h.world![8];
+      const offset = toView([w8.x, w8.y, w8.z ?? 0]);
+      for (let k = 0; k < 3; k++) near(tip[k], P[k] + offset[k], 1e-6);
+    }
+  }
+});
+
+test('circulation: plane normal and direction of a circle; a back-and-forth line is not circling', () => {
+  const ring = Array.from({ length: 30 }, (_, i): [number, number, number] => [Math.cos(i / 4.7), 0, Math.sin(i / 4.7)]);
+  const c = circulation(ring);
+  assert.equal(dominantAxis(c.area, null), 1);
+  assert.ok(c.coherence > 0.95);
+  const line = Array.from({ length: 30 }, (_, i): [number, number, number] => [Math.sin(i / 3), 0.01 * (i % 2), 0]);
+  assert.ok(circulation(line).coherence < 0.3);
+});
+
+test('dominantAxis keeps the current axis unless another is clearly stronger', () => {
+  assert.equal(dominantAxis([1, 1.2, 0], 0), 0);
+  assert.equal(dominantAxis([1, 1.6, 0], 0), 1);
+  assert.equal(dominantAxis([0.1, -2, 0.3], null), 1);
+});
+
+test('angleAbout is signed by the right-hand rule and ignores the along-axis part', () => {
+  near(angleAbout([0, 0, 1], [1, 0, 5], [0, 1, -3]), Math.PI / 2);
+  near(angleAbout([0, 0, -1], [1, 0, 0], [0, 1, 0]), -Math.PI / 2);
+});
+
+import { fitCircle } from '../src/utils/gestureMath';
+test('fitCircle finds the true centre from a partial arc; a straight line has none', () => {
+  const arc = Array.from({ length: 12 }, (_, i): [number, number] => [3 + 2 * Math.cos(i / 6), -1 + 2 * Math.sin(i / 6)]); // under a third of a circle
+  const c = fitCircle(arc)!;
+  near(c[0], 3, 1e-9);
+  near(c[1], -1, 1e-9);
+  assert.equal(fitCircle(Array.from({ length: 10 }, (_, i): [number, number] => [i, 2 * i])), null);
+});

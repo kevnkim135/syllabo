@@ -21,31 +21,54 @@ const R = (o: HandOptions = {}): HandInput => makeHand({ at: [0.3, 0.7], label: 
 const L = (o: HandOptions = {}): HandInput => makeHand({ at: [0.7, 0.7], label: 'Right', ...o });
 const POINT: [number, number, number, number] = [0, 1, 1, 1];
 
-// ---------------- zoom ----------------
-test('zoom: closing all fingers zooms out, opening zooms in, and nothing else fires', () => {
-  const close = run((i) => [R({ curl: ramp(i, 10, 40), spread: 1 - ramp(i, 10, 40) })], 55);
-  assert.deepEqual(close.types, ['zoom']);
-  const factors = close.cmds.map((c) => (c.type === 'zoom' ? c.factor : 0));
-  assert.ok(factors.every((f) => f > 1), 'closing must only zoom out');
-  assert.ok(factors.reduce((a, b) => a * b, 1) > 1.5, 'a full close is a clear zoom');
-  assert.ok(close.out.some((f) => f.label === 'zoomOut'));
+// ---------------- zoom (three fingers: pinched together = in, spread apart = out) ----------------
+const zooms = (cmds: Command[]) => cmds.flatMap((c) => (c.type === 'zoom' ? [c.factor] : []));
+const product = (fs: number[]) => fs.reduce((a, b) => a * b, 1);
+const RELAXED = { curl: 0.5, thumbCurl: 0.2 }; // neither open, nor a fist, nor a pinch: the neutral hand
+const SPREAD3 = { curl: [0, 0, 1, 1] as [number, number, number, number], thumbCurl: 0 };
 
-  const open = run((i) => [R({ curl: 1 - ramp(i, 10, 40), spread: ramp(i, 10, 40) })], 55);
-  assert.deepEqual(open.types, ['zoom']);
-  assert.ok(open.cmds.every((c) => c.type === 'zoom' && c.factor < 1), 'opening must only zoom in');
+test('zoom: holding a three-finger pinch zooms in steadily, only after a short hold, and speeds up', () => {
+  const r = run(() => [R({ gather: true })], 90); // 3 s
+  assert.deepEqual(r.types, ['zoom']);
+  const fs = zooms(r.cmds);
+  assert.ok(fs.every((f) => f < 1), 'a three-finger pinch only ever zooms in');
+  assert.ok(product(fs) < 0.25, `3 s of holding is a big zoom (${product(fs)})`);
+  const firstAt = r.out.findIndex((f) => f.label === 'zoomIn');
+  assert.ok(firstAt * DT >= GESTURE.zoomHoldMs, 'nothing happens during the hold delay');
+  assert.ok(fs.at(-1)! < fs[0], 'the rate ramps up the longer it is held');
 });
 
-test('zoom: a still or jittery open hand does nothing (dead zone)', () => {
-  const still = run((i) => [R({ curl: 0.02 * (i % 2), at: [0.3 + 0.002 * (i % 3), 0.7] })], 90);
-  assert.deepEqual(still.cmds, []);
-  assert.equal(still.out.at(-1)!.label, 'hand');
+test('zoom: holding thumb, index and middle spread (ring and pinky folded) zooms out', () => {
+  const r = run(() => [R(SPREAD3)], 60);
+  assert.deepEqual(r.types, ['zoom']);
+  assert.ok(zooms(r.cmds).every((f) => f > 1));
+  assert.ok(r.out.some((f) => f.label === 'zoomOut'));
 });
 
-test('zoom: an open hand that just moves around (slowly or quickly sideways) does not zoom or navigate', () => {
-  const drift = run((i) => [R({ at: [0.3 + 0.3 * ramp(i, 10, 70), 0.7 - 0.2 * ramp(i, 10, 70)] })], 80);
-  assert.deepEqual(drift.cmds, []);
-  const sideways = run((i) => [R({ at: [0.2 + 0.6 * ramp(i, 10, 16), 0.7] })], 40);
-  assert.deepEqual(sideways.cmds, []);
+test('zoom: an open hand, a two-finger pinch and a peace sign never zoom', () => {
+  assert.deepEqual(run(() => [R()], 60).cmds, []);
+  assert.deepEqual(run(() => [R({ pinch: true })], 60).cmds, []);
+  assert.deepEqual(run(() => [R({ curl: [0, 0, 1, 1], thumbCurl: 1 })], 60).cmds, []);
+});
+
+test('zoom: letting go of the pinch never zooms back out (the old return-stroke problem)', () => {
+  // pinch held, then the hand opens briefly as people do when letting go, then relaxes
+  const r = run((i) => [R(i < 45 ? { gather: true } : i < 53 ? {} : RELAXED)], 90);
+  const fs = zooms(r.cmds);
+  assert.ok(fs.length > 5 && fs.every((f) => f < 1), 'only zoom-in steps, even while the hand relaxes');
+});
+
+test('zoom: a relaxed hand does nothing, and a moving hand pauses the zoom', () => {
+  assert.deepEqual(run(() => [R(RELAXED)], 60).cmds, []);
+  const moving = run((i) => [R({ gather: true, at: [0.15 + 0.6 * ramp(i, 0, 30), 0.7] })], 30); // about 0.8 frame heights/s
+  assert.deepEqual(moving.cmds, [], 'travelling is not zooming');
+});
+
+test('zoom: switching from pinched to spread changes direction with a fresh hold', () => {
+  const r = run((i) => [R(i < 40 ? { gather: true } : SPREAD3)], 100);
+  const fs = zooms(r.cmds);
+  const firstOut = fs.findIndex((f) => f > 1);
+  assert.ok(firstOut > 0 && fs.slice(0, firstOut).every((f) => f < 1) && fs.slice(firstOut).every((f) => f > 1));
 });
 
 // ---------------- twirl ----------------
@@ -77,81 +100,118 @@ test('twirl: needs the pointing pose and a real circle', () => {
   assert.deepEqual(run((i) => [R({ curl: POINT, indexDir: [Math.sin(0.6 * ramp(i, 10, 40)), -Math.cos(0.6 * ramp(i, 10, 40)), 0] })], 60).cmds, []);
 });
 
-// ---------------- rotate ----------------
+// ---------------- rotate (pinch clutch + the other fingertip draws circles) ----------------
 const sumAngle = (cmds: Command[]) => cmds.reduce((s, c) => s + (c.type === 'rotateAxis' ? c.angle : 0), 0);
+type V3 = [number, number, number];
 
-test('rotate: left pinch + right index turning counter-clockwise (as the user sees it) rotates about +z', () => {
-  const total = 0.6;
-  // The user's finger tips toward the user's LEFT, which is +x in the raw image.
-  const r = run((i) => {
-    const a = total * ramp(i, 15, 45);
-    return [L({ pinch: true }), R({ curl: POINT, indexDir: [Math.sin(a), -Math.cos(a), 0] })];
-  }, 70);
+/** A pointing hand whose wrist sits at view position P (metres; z = distance from the camera). */
+function handAt(P: V3, o: HandOptions = {}): HandOptions {
+  const s = GESTURE.focal / P[2]; // frame heights per metre at that distance
+  return { curl: POINT, ...o, scale: s, at: [0.5 + (-P[0] * s) / GESTURE.aspect, 0.5 + -P[1] * s] };
+}
+const D0 = 0.5; // half a metre from the camera
+const RAD = 0.07;
+const PLANES: Record<string, (t: number) => V3> = {
+  level: (t) => [RAD * Math.cos(t), 0, D0 + RAD * Math.sin(t)], // same height, toward and away from the camera
+  depth: (t) => [0, RAD * Math.cos(t), D0 + RAD * Math.sin(t)], // up and down, toward and away from the camera
+  screen: (t) => [RAD * Math.cos(t), RAD * Math.sin(t), D0], // flat to the screen
+};
+/** Clutch with one hand while the other draws `turns` circles in `plane` (one circle per second). */
+const circling = (plane: keyof typeof PLANES, dir = 1, steer = R, clutch = L, turns = 2) => (i: number) => {
+  const t = dir * 2 * Math.PI * Math.min(turns, Math.max(0, i - 10) / 30);
+  return [clutch({ pinch: true }), steer(handAt(PLANES[plane](t)))];
+};
+const axesOf = (cmds: Command[]) => cmds.flatMap((c) => (c.type === 'rotateAxis' ? [c.axis] : []));
+
+test('rotate: a circle at one height spins only about the vertical axis', () => {
+  const r = run(circling('level'), 80);
   assert.deepEqual(r.types, ['rotateAxis']);
-  for (const c of r.cmds) {
-    assert.ok(c.type === 'rotateAxis' && c.angle > 0);
-    assert.ok(c.axis[2] > 0.98, `axis ${c.axis}`);
-  }
-  const got = sumAngle(r.cmds);
-  assert.ok(Math.abs(got - total * GESTURE.rotateGain) < 0.15, `rotated ${got}`);
+  assert.ok(axesOf(r.cmds).every((a) => Math.abs(a[1]) === 1 && a[0] === 0 && a[2] === 0), 'vertical axis only');
   assert.ok(r.out.some((f) => f.label === 'rotate'));
 });
 
-test('rotate: the axis follows the finger (clockwise = -z, tipping away from the user = -x)', () => {
-  const cw = run((i) => {
-    const a = 0.5 * ramp(i, 15, 45);
-    return [L({ pinch: true }), R({ curl: POINT, indexDir: [-Math.sin(a), -Math.cos(a), 0] })];
-  }, 60);
-  assert.ok(cw.cmds.length > 3 && cw.cmds.every((c) => c.type === 'rotateAxis' && c.axis[2] < -0.98));
-
-  const away = run((i) => {
-    const a = 0.5 * ramp(i, 15, 45); // toward the camera = smaller z
-    return [L({ pinch: true }), R({ curl: POINT, indexDir: [0, -Math.cos(a), -Math.sin(a)] })];
-  }, 60);
-  assert.ok(away.cmds.length > 3 && away.cmds.every((c) => c.type === 'rotateAxis' && c.axis[0] < -0.98));
+test('rotate: a circle toward and away from the camera spins about the horizontal axis', () => {
+  const r = run(circling('depth'), 80);
+  assert.deepEqual(r.types, ['rotateAxis']);
+  assert.ok(axesOf(r.cmds).every((a) => Math.abs(a[0]) === 1 && a[1] === 0 && a[2] === 0), 'horizontal axis only');
 });
 
-test('rotate: no clutch, no rotation; releasing the pinch stops it at once', () => {
-  const dir = (i: number): [number, number, number] => [Math.sin(0.02 * i), -Math.cos(0.02 * i), 0];
-  assert.deepEqual(run((i) => [L(), R({ curl: POINT, indexDir: dir(i) })], 60).cmds, []);
-  const r = run((i) => [L({ pinch: i < 30 }), R({ curl: POINT, indexDir: dir(i) })], 60);
-  const before = sumAngle(r.cmds);
-  assert.ok(before > 0.3 && before < 0.02 * 31 * GESTURE.rotateGain, `rotated ${before}`);
+test('rotate: a circle flat to the screen spins about the axis out of the screen, in the same direction', () => {
+  const ccw = run(circling('screen', 1), 80);
+  assert.ok(ccw.cmds.length > 10 && axesOf(ccw.cmds).every((a) => a[2] === 1), 'counter-clockwise as the user sees it = +z');
+  const cw = run(circling('screen', -1), 80);
+  assert.ok(cw.cmds.length > 10 && axesOf(cw.cmds).every((a) => a[2] === -1), 'clockwise = -z');
 });
 
-test('rotate: the clutch must be the LEFT hand and the finger the RIGHT hand', () => {
-  const r = run((i) => [R({ pinch: true }), L({ curl: POINT, indexDir: [Math.sin(0.02 * i), -Math.cos(0.02 * i), 0] })], 60);
-  assert.deepEqual(r.cmds, []);
+test('rotate: one circle of the fingertip spins the model about one turn', () => {
+  const r = run(circling('screen', 1, R, L, 3), 120); // three circles
+  const got = sumAngle(r.cmds) / (2 * Math.PI * GESTURE.rotateGain);
+  assert.ok(got > 2.5 && got < 3.05, `turned ${got.toFixed(2)} times for 3 circles`);
 });
 
-test('rotate: a still finger emits nothing while clutched (dead zone), label shows the clutch', () => {
-  const r = run(() => [L({ pinch: true }), R({ curl: POINT })], 40);
-  assert.deepEqual(r.cmds, []);
-  assert.equal(r.out.at(-1)!.label, 'rotate');
-  assert.equal(run(() => [L({ pinch: true }), R()], 20).out.at(-1)!.label, 'clutch');
+test('rotate: noisy depth from the camera does not tip the axis', () => {
+  let seed = 7;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647 - 0.5) * 2;
+  const r = run((i) => {
+    const t = 2 * Math.PI * Math.max(0, i - 10) / 30;
+    const [x, y, z] = PLANES.screen(t);
+    return [L({ pinch: true }), R(handAt([x + 0.003 * rand(), y + 0.003 * rand(), z + 0.015 * rand()]))];
+  }, 80);
+  assert.ok(r.cmds.length > 10 && axesOf(r.cmds).every((a) => a[2] === 1), `axes ${JSON.stringify(axesOf(r.cmds).slice(0, 3))}`);
 });
 
-// ---------------- swipe ----------------
-const swipeY = (i: number, from: number, to: number, start = 15, frames = 6) => from + (to - from) * ramp(i, start, start + frames);
+test('rotate: either hand can be the clutch', () => {
+  const r = run(circling('screen', 1, L, R), 80);
+  assert.ok(r.cmds.length > 10 && axesOf(r.cmds).every((a) => a[2] === 1));
+});
 
-test('swipe: a hard fast open-hand swipe up emits exactly one next; down emits prev', () => {
-  const up = run((i) => [R({ at: [0.4, swipeY(i, 0.9, 0.4)] })], 60);
-  assert.deepEqual(up.cmds, [{ type: 'next' }]);
-  assert.ok(up.out.some((f) => f.label === 'next'));
-  const down = run((i) => [R({ at: [0.4, swipeY(i, 0.4, 0.9)] })], 60);
-  assert.deepEqual(down.cmds, [{ type: 'prev' }]);
+test('rotate: no clutch, a still finger, back-and-forth motion or tiny jitter circles do nothing', () => {
+  assert.deepEqual(run((i) => [L(), R(handAt(PLANES.screen(2 * Math.PI * i / 30)))], 80).cmds, []); // no clutch
+  assert.deepEqual(run(() => [L({ pinch: true }), R(handAt([0, 0, D0]))], 60).cmds, []); // still
+  assert.deepEqual(run((i) => [L({ pinch: true }), R(handAt([0.08 * Math.sin(i / 4), 0, D0]))], 80).cmds, []); // wag
+  assert.deepEqual(run((i) => [L({ pinch: true }), R(handAt([0.004 * Math.cos(i / 3), 0.004 * Math.sin(i / 3), D0]))], 80).cmds, []); // jitter
+});
+
+test('rotate: once rotating, a bending steering finger does not drop the rotation', () => {
+  const r = run((i) => {
+    const t = 2 * Math.PI * Math.min(2, Math.max(0, i - 10) / 30);
+    const curl: [number, number, number, number] = [0.45 * ramp(i, 25, 35), 1, 1, 1];
+    return [L({ pinch: true }), R(handAt(PLANES.screen(t), { curl }))];
+  }, 80);
+  assert.ok(sumAngle(r.cmds) > 2 * Math.PI * 1.5 * GESTURE.rotateGain, `turned ${sumAngle(r.cmds)}`);
+});
+
+test('rotate: label shows the clutch until the other hand points', () => {
+  assert.equal(run(() => [L({ pinch: true }), R({ curl: 1 })], 20).out.at(-1)!.label, 'clutch');
+});
+
+// ---------------- swipe (sideways: flick through this lesson's models) ----------------
+// Raw image x grows toward the USER's left, so a swipe to the user's left is increasing x.
+const swipeX = (i: number, from: number, to: number, start = 15, frames = 6) => from + (to - from) * ramp(i, start, start + frames);
+
+test('swipe: a hard fast swipe to the left shows the next model, to the right the previous one', () => {
+  const left = run((i) => [R({ at: [swipeX(i, 0.25, 0.75), 0.6] })], 60);
+  assert.deepEqual(left.cmds, [{ type: 'modelStep', step: 1 }]);
+  assert.ok(left.out.some((f) => f.label === 'modelNext'));
+  const right = run((i) => [R({ at: [swipeX(i, 0.75, 0.25), 0.6] })], 60);
+  assert.deepEqual(right.cmds, [{ type: 'modelStep', step: -1 }]);
+});
+
+test('swipe: up and down no longer do anything (saved for something else)', () => {
+  assert.deepEqual(run((i) => [R({ at: [0.4, 0.9 - 0.5 * ramp(i, 15, 21)] })], 60).cmds, []);
+  assert.deepEqual(run((i) => [R({ at: [0.4, 0.4 + 0.5 * ramp(i, 15, 21)] })], 60).cmds, []);
 });
 
 test('swipe: the return stroke does not count', () => {
-  const r = run((i) => [R({ at: [0.4, i < 24 ? swipeY(i, 0.9, 0.4) : swipeY(i, 0.4, 0.9, 24)] })], 70);
-  assert.deepEqual(r.cmds, [{ type: 'next' }]);
+  const r = run((i) => [R({ at: [i < 24 ? swipeX(i, 0.25, 0.75) : swipeX(i, 0.75, 0.25, 24), 0.6] })], 70);
+  assert.deepEqual(r.cmds, [{ type: 'modelStep', step: 1 }]);
 });
 
-test('swipe: ordinary movement, short flicks, fists and pointing hands never navigate', () => {
-  assert.deepEqual(run((i) => [R({ at: [0.4, swipeY(i, 0.9, 0.4, 15, 30)] })], 70).cmds, []); // slow
-  assert.deepEqual(run((i) => [R({ at: [0.4, swipeY(i, 0.7, 0.55, 15, 3)] })], 50).cmds, []); // short
-  assert.deepEqual(run((i) => [R({ curl: 1, at: [0.4, swipeY(i, 0.9, 0.4)] })], 50).cmds, []); // fist
-  assert.deepEqual(run((i) => [R({ curl: POINT, at: [0.4, swipeY(i, 0.9, 0.4)] })], 50).cmds, []); // pointing
+test('swipe: slow drifts, short flicks, fists and pointing hands never flip models', () => {
+  assert.deepEqual(run((i) => [R({ at: [swipeX(i, 0.25, 0.75, 15, 30), 0.6] })], 70).cmds, []); // slow
+  assert.deepEqual(run((i) => [R({ at: [swipeX(i, 0.4, 0.52, 15, 3), 0.6] })], 50).cmds, []); // short
+  assert.deepEqual(run((i) => [R({ curl: 1, at: [swipeX(i, 0.25, 0.75), 0.6] })], 50).cmds, []); // fist
+  assert.deepEqual(run((i) => [R({ curl: POINT, at: [swipeX(i, 0.25, 0.75), 0.6] })], 50).cmds, []); // pointing
 });
 
 // ---------------- home ----------------
@@ -178,7 +238,8 @@ test('hysteresis: a pose must be held a few frames, and modes pass through none'
   const firstPoint = modes.indexOf('point');
   assert.ok(firstPoint > 20);
   assert.equal(modes[firstPoint - 1], 'none'); // released before the next one begins
-  assert.deepEqual(r.cmds, []); // switching pose is not itself a gesture
+  assert.deepEqual(r.types.filter((t) => t !== 'zoom'), []); // switching pose is not itself a gesture
+  assert.ok(zooms(r.cmds).every((f) => f < 1)); // only the open hand's own hold-zoom
 });
 
 test('hysteresis: one dropped tracking frame does not end a mode', () => {

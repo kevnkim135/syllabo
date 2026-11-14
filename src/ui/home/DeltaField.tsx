@@ -8,7 +8,7 @@ interface Delta {
   size: number; color: string; alpha: number;
 }
 
-const COLORS = ['#D5C2FF', '#D5C2FF', '#8B6BD6', '#2F5D50']; // palette, weighted toward the light lilac
+const COLORS = ['#D5C2FF', '#D5C2FF', '#D5C2FF', '#B9A0F0', '#8B6BD6']; // purples only, weighted toward the light lilac
 const GAP = 58; // px between deltas
 const REACH = 140; // cursor repel radius
 const TAU = Math.PI * 2;

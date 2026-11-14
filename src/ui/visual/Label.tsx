@@ -1,6 +1,5 @@
 import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
-import { palette } from './palette';
 
 /**
  * Text label as a camera-facing sprite drawn to a canvas texture. It stays inside the WebGL scene
@@ -17,18 +16,17 @@ export function Label({ text, position = [0, 0, 0], height = 0.32 }: { text: str
     c.width = Math.ceil(ctx.measureText(text).width) + pad * 2;
     c.height = px + pad * 1.5;
     ctx.font = font; // resizing resets context state
-    const p = palette();
-    // A soft white pill with a hairline, like the DOM chips around the stage.
+    // Neutral white pill with dark text: scene labels stay readable on any model color.
     ctx.globalAlpha = 0.88;
-    ctx.fillStyle = p.white;
+    ctx.fillStyle = '#ffffff';
     ctx.beginPath();
     ctx.roundRect(1.5, 1.5, c.width - 3, c.height - 3, (c.height - 3) / 2);
     ctx.fill();
     ctx.globalAlpha = 1;
     ctx.lineWidth = 2;
-    ctx.strokeStyle = p.lilac200;
+    ctx.strokeStyle = 'rgba(30, 30, 40, 0.18)';
     ctx.stroke();
-    ctx.fillStyle = p.forest;
+    ctx.fillStyle = '#23232d';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, pad, c.height / 2 + 2);
     const texture = new THREE.CanvasTexture(c);

@@ -1,8 +1,8 @@
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono, type Context } from 'hono';
-import { IMAGE_TYPES, LESSON_KINDS, type ExpandRequest, type LessonRequest, type SolveRequest } from '../shared/types';
-import { classifyScope, expandTopic, generateLesson, solveProblem, usingMock } from './llm';
+import { IMAGE_TYPES, LESSON_KINDS, type ExpandRequest, type IntentContext, type IntentRequest, type LessonRequest, type SolveRequest } from '../shared/types';
+import { classifyScope, expandTopic, generateLesson, resolveIntent, solveProblem, usingMock } from './llm';
 
 try {
   process.loadEnvFile();
@@ -72,6 +72,24 @@ app.post('/api/solve', async (c) => {
   const data = await solveProblem({ subject, level: text(b.level), focus: text(b.focus), question, image });
   if (data === undefined) return c.json({ error: invalid }, 502);
   return c.json(data);
+});
+
+app.post('/api/intent', async (c) => {
+  const b = await json<IntentRequest>(c);
+  const transcript = text(b.transcript, 500);
+  if (!transcript) return c.json({ error: 'transcript is required' }, 400);
+  const x = (b.context ?? {}) as Partial<IntentContext>;
+  const context: IntentContext = {
+    subject: text(x.subject),
+    focus: text(x.focus),
+    section: x.section && LESSON_KINDS.includes(x.section) ? x.section : undefined,
+    model: text(x.model),
+    topics: list(x.topics, 30),
+    open: list(x.open, 20),
+    saved: list(x.saved, 50),
+    folders: list(x.folders, 30),
+  };
+  return c.json(await resolveIntent({ transcript, context }));
 });
 
 // Production: serve the built frontend from the same process.

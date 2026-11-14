@@ -10,6 +10,7 @@ export type Source = 'typed' | 'spoken' | 'screenshot';
 export type Shot = NonNullable<SolveRequest['image']> & { url: string; name: string; size: number };
 export interface Job {
   id: number;
+  lessonId: string; // the lesson it was asked in (several lessons can be open)
   subject: string;
   level: string;
   focus: string | null;
@@ -66,19 +67,18 @@ function run(job: Job) {
     (p) => {
       if (!jobs.some((j) => j.id === job.id)) return; // dismissed while solving
       setJobs(jobs.filter((j) => j.id !== job.id));
-      if (getLesson().subject !== job.subject) return; // the student started a different lesson
       origins.set(p, { source: job.source, shot: job.shot });
-      lesson.addSolved(p);
+      lesson.addSolved(p, job.lessonId); // lands in its own lesson, even if another tab is open now
     },
     (e: Error) => setJobs(jobs.map((j) => (j.id === job.id ? { ...j, error: e.message || 'Could not solve that problem.' } : j))),
   );
 }
 
 export function startSolve(question: string, shot: Shot | null, source: Source) {
-  const { subject, level, focus } = getLesson();
+  const { id: lessonId, subject, level, focus } = getLesson();
   const q = question.trim();
   if (!subject || (!q && !shot)) return;
-  const job: Job = { id: ++nextId, subject, level, focus, question: q, shot, source };
+  const job: Job = { id: ++nextId, lessonId, subject, level, focus, question: q, shot, source };
   setJobs([job, ...jobs]);
   run(job);
 }
