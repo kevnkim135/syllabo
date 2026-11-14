@@ -8,34 +8,67 @@ import { clamp } from '../../utils/gestureMath';
 import { Molecule } from './Molecule';
 import { Surface } from './Surface';
 import { Diagram } from './Diagram';
+import { ViewPad } from './ViewPad';
 
-export function VisualStage({ spec }: { spec: VisualSpec }) {
+export function VisualStage({ spec, paused = false }: { spec: VisualSpec; paused?: boolean }) {
   return (
+    <div className="stage-layout">
     <div className="stage">
-      <Canvas camera={{ position: [6, 5, 6], fov: 50 }}>
+      <Canvas camera={{ position: [6, 5, 6], fov: 50 }} frameloop={paused ? 'never' : 'always'}>
         <color attach="background" args={['#0b1020']} />
         <ambientLight intensity={0.6} />
         <directionalLight position={[5, 10, 5]} intensity={1.2} />
         {spec.kind === 'molecule' && <Molecule spec={spec} />}
         {spec.kind === 'surface' && <Surface spec={spec} />}
         {spec.kind === 'diagram' && <Diagram spec={spec} />}
-        <CameraRig />
+        <CameraRig specKey={spec.title} active={!paused} />
       </Canvas>
       <div className="stage-title">{spec.title}</div>
+      <ViewPad />
+    </div>
+      <aside className="card guide">
+        <h3>Two-hand steering</h3>
+        <ol>
+          <li>Click <strong>Start gestures</strong> (bottom right) and allow the camera.</li>
+          <li>Pinch thumb and index on <strong>both hands</strong>, like gripping a wheel.</li>
+          <li><strong>Turn</strong> the wheel to rotate the view left or right.</li>
+          <li><strong>Raise or lower</strong> both hands to tilt up or down.</li>
+          <li><strong>Spread or close</strong> your hands to zoom.</li>
+        </ol>
+        <h3>Other controls</h3>
+        <ul className="muted">
+          <li>One-hand pinch and drag: rotate</li>
+          <li>Open-hand swipe: next / previous tab</li>
+          <li>Voice: "rotate left", "zoom in", "top view", "reset", "next"</li>
+          <li>Keys: arrows, + / -, T F S, R, 1-4</li>
+          <li>Mouse: drag to orbit, scroll to zoom</li>
+        </ul>
+      </aside>
     </div>
   );
 }
 
 /** Mouse via OrbitControls; gesture/voice commands move the same camera. */
-function CameraRig() {
+function CameraRig({ specKey, active }: { specKey: string; active: boolean }) {
   const controls = useRef<ComponentRef<typeof OrbitControls>>(null);
   const camera = useThree((s) => s.camera);
+
+  const activeRef = useRef(active);
+  activeRef.current = active;
+
+  // New model: start from the default angle.
+  useEffect(() => {
+    const c = controls.current;
+    c?.target.set(0, 0, 0);
+    camera.position.setFromSpherical(new THREE.Spherical(9.5, Math.PI / 3, Math.PI / 4));
+    c?.update();
+  }, [specKey, camera]);
 
   useEffect(
     () =>
       commands.on((cmd) => {
         const c = controls.current;
-        if (!c) return;
+        if (!c || !activeRef.current) return; // hidden stage ignores gestures/voice/keys
         const s = new THREE.Spherical().setFromVector3(camera.position.clone().sub(c.target));
         switch (cmd.type) {
           case 'rotate':

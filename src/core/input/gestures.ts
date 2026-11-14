@@ -1,6 +1,6 @@
 import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 import { commands } from '../commands';
-import { clamp, dist, isOpenHand, isPinching, palm, type Pt } from '../../utils/gestureMath';
+import { isOpenHand, isPinching, palm, smoothPt, twoHandPose, wheelDelta, type Pt, type TwoHandPose } from '../../utils/gestureMath';
 
 // Keep the WASM version in step with @mediapipe/tasks-vision in package.json.
 const WASM = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm';
@@ -11,29 +11,41 @@ const ROTATE_GAIN = 6; // radians per full-frame hand movement
 const SWIPE_DIST = 0.3; // fraction of frame width
 const SWIPE_MS = 400;
 
-export type GestureLabel = 'none' | 'rotate' | 'zoom' | 'open' | 'swipe';
+export type GestureLabel = 'none' | 'rotate' | 'wheel' | 'open' | 'swipe';
 
 /**
  * Gesture map:
- *   one-hand pinch + drag      -> rotate
- *   two-hand pinch, spread/close -> zoom in/out
- *   open-hand fast swipe        -> next / previous tab
+ *   two-hand pinch "steering wheel": tilt the line between hands -> turn the view left/right,
+ *                                    raise/lower both hands -> tilt up/down,
+ *                                    spread/close hands -> zoom
+ *   one-hand pinch + drag      -> rotate (fallback)
+ *   open-hand fast swipe       -> next / previous tab
  */
 export function createGestureInterpreter(emit = commands.emit) {
   let last: Pt | null = null;
-  let lastSpan: number | null = null;
+  let wheel: TwoHandPose | null = null;
+  let smooth: [Pt, Pt] | null = null;
   let swipe: { x: number; t: number } | null = null;
   let cooldownUntil = 0;
 
   return function step(hands: Pt[][], now: number): GestureLabel {
     if (hands.length === 2 && hands.every((h) => isPinching(h))) {
-      const span = dist(palm(hands[0]), palm(hands[1]));
-      if (lastSpan) emit({ type: 'zoom', factor: clamp(lastSpan / span, 0.9, 1.1) });
-      lastSpan = span;
+      const raw = [palm(hands[0]), palm(hands[1])] as const;
+      // Hand order from the tracker can flip between frames; match each hand to its nearest previous point.
+      const flip = smooth && Math.hypot(raw[0].x - smooth[1].x, raw[0].y - smooth[1].y) < Math.hypot(raw[0].x - smooth[0].x, raw[0].y - smooth[0].y);
+      const ordered = flip ? [raw[1], raw[0]] : [raw[0], raw[1]];
+      smooth = [smoothPt(smooth?.[0] ?? null, ordered[0]), smoothPt(smooth?.[1] ?? null, ordered[1])];
+      const pose = twoHandPose(smooth[0], smooth[1]);
+      if (wheel) {
+        const d = wheelDelta(wheel, pose);
+        if (d.dx || d.dy) emit({ type: 'rotate', dx: d.dx, dy: d.dy });
+        if (d.zoom !== 1) emit({ type: 'zoom', factor: d.zoom });
+      }
+      wheel = pose;
       last = null;
-      return 'zoom';
+      return 'wheel';
     }
-    lastSpan = null;
+    wheel = smooth = null;
 
     const h = hands[0];
     if (!h) {

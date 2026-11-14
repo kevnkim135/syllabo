@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { startGestures } from '../../core/input/gestures';
+import { startGestures, type GestureLabel } from '../../core/input/gestures';
 import { startVoice } from '../../core/input/voice';
+import { startKeyboard } from '../../core/input/keyboard';
+
+const GESTURE_TEXT: Record<GestureLabel, string> = {
+  none: 'Show your hands to the camera',
+  wheel: 'Steering: turn, lift or spread both hands',
+  rotate: 'One-hand rotate',
+  open: 'Open hand: swipe to change tab',
+  swipe: 'Swiped',
+};
 
 export function InputControls() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -9,6 +18,8 @@ export function InputControls() {
   const [camOn, setCamOn] = useState(false);
   const [micOn, setMicOn] = useState(false);
   const [status, setStatus] = useState('');
+
+  useEffect(() => startKeyboard(), []);
 
   useEffect(
     () => () => {
@@ -27,7 +38,7 @@ export function InputControls() {
     }
     try {
       setStatus('Loading hand tracking…');
-      stopCam.current = await startGestures(videoRef.current!, (g) => setStatus(`gesture: ${g}`));
+      stopCam.current = await startGestures(videoRef.current!, (g) => setStatus(GESTURE_TEXT[g]));
       setCamOn(true);
     } catch (e) {
       setStatus(`Camera error: ${(e as Error).message}`);
@@ -54,12 +65,10 @@ export function InputControls() {
         <button onClick={toggleCam}>{camOn ? 'Stop' : 'Start'} gestures</button>
         <button onClick={toggleMic}>{micOn ? 'Stop' : 'Start'} voice</button>
       </div>
+      <p className="status">
+        <span className={`led ${camOn ? 'on' : ''}`} /> Camera <span className={`led ${micOn ? 'on' : ''}`} /> Mic
+      </p>
       {status && <p className="muted">{status}</p>}
-      <details>
-        <summary>Controls</summary>
-        <p>Pinch + drag to rotate · pinch both hands and spread to zoom · open-hand swipe to change tabs</p>
-        <p>Say: "zoom in/out", "rotate left/right", "top/front/side view", "reset", "next", "previous"</p>
-      </details>
     </aside>
   );
 }

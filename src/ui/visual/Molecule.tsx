@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
-import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import type { MoleculeSpec } from '../../../shared/types';
 import { element } from '../../utils/elements';
+import { Label } from './Label';
 
 const SCALE = 1.6; // angstroms -> scene units
 
@@ -22,9 +22,7 @@ export function Molecule({ spec }: { spec: MoleculeSpec }) {
           <mesh key={i} position={pts[i]}>
             <sphereGeometry args={[e.radius, 32, 32]} />
             <meshStandardMaterial color={e.color} roughness={0.35} />
-            <Html center distanceFactor={10}>
-              <span className="label">{a.element}</span>
-            </Html>
+            <Label text={a.element} height={0.28} />
           </mesh>
         );
       })}
@@ -36,20 +34,27 @@ export function Molecule({ spec }: { spec: MoleculeSpec }) {
 }
 
 function Bond({ from, to, order }: { from: THREE.Vector3; to: THREE.Vector3; order: number }) {
-  const { mid, len, quat } = useMemo(() => {
+  // One cylinder per bond order, spaced perpendicular to the bond so double/triple bonds read clearly.
+  const { len, quat, mid, offsets } = useMemo(() => {
     const dir = to.clone().sub(from);
-    return {
-      mid: from.clone().add(to).multiplyScalar(0.5),
-      len: dir.length(),
-      quat: new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize()),
-    };
-  }, [from, to]);
-  const r = 0.07 * order; // TODO: draw double/triple bonds as parallel cylinders
+    const len = dir.length();
+    const unit = dir.clone().normalize();
+    const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), unit);
+    const ref = Math.abs(unit.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+    const perp = new THREE.Vector3().crossVectors(unit, ref).normalize();
+    const gap = 0.16;
+    const offsets = Array.from({ length: order }, (_, i) => perp.clone().multiplyScalar((i - (order - 1) / 2) * gap));
+    return { len, quat, mid: from.clone().add(to).multiplyScalar(0.5), offsets };
+  }, [from, to, order]);
 
   return (
-    <mesh position={mid} quaternion={quat}>
-      <cylinderGeometry args={[r, r, len, 12]} />
-      <meshStandardMaterial color="#c8c8c8" />
-    </mesh>
+    <group>
+      {offsets.map((o, i) => (
+        <mesh key={i} position={mid.clone().add(o)} quaternion={quat}>
+          <cylinderGeometry args={[0.05, 0.05, len, 12]} />
+          <meshStandardMaterial color="#c8c8c8" />
+        </mesh>
+      ))}
+    </group>
   );
 }

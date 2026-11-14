@@ -2,9 +2,9 @@
 
 Type any subject and get a full, explorable lesson:
 
-- **History:** a timeline of key figures and findings
-- **Topic map:** an overarching breakdown of everything in the field
-- **Problems:** worked examples, including borderline and base cases
+- **History:** a timeline with discoveries, events and prominent figures color-coded
+- **Topic map:** a complete overview of the field; click any topic for an in-depth explanation, then keep drilling into deeper subtopics
+- **Problems:** worked examples ordered from base cases through edge cases, with hints and filters
 - **Interactive model:** a 3D visual you control with **hand gestures and voice**. Chemistry gets molecules, multivariable calculus gets surfaces, physics gets force diagrams.
 
 Built at **SanD Hacks 2026** (UCSD). Submission checklist and deadlines: [SUBMISSION.md](SUBMISSION.md).
@@ -32,9 +32,10 @@ Camera and mic only work on `localhost` or HTTPS.
 | `ANTHROPIC_MODEL` | `claude-sonnet-5-5` | Model for generation |
 | `PORT` | `8787` | API port (Vite proxies `/api` here) |
 | `MOCK_LLM` | `0` | `1` forces mock data even with a key |
+| `MOCK_DELAY_MS` | `0` | Mock mode only: simulated latency to rehearse loading states |
 
 ## Scripts
-`dev` (web + api) · `typecheck` · `build` (frontend into `dist/`) · `start` (API + serves `dist/`)
+`dev` (web + api) · `typecheck` · `test` (unit tests) · `build` (frontend into `dist/`) · `start` (API + serves `dist/`)
 
 ## Layout
 ```
@@ -47,8 +48,11 @@ src/utils/             pure helpers (gesture math, element colors)
 Every input (mouse, gesture, voice) goes through `src/core/commands.ts`, so a new gesture works in every visual automatically.
 
 ## Controls
-- **Gestures:** pinch + drag to rotate · pinch with both hands and spread or close to zoom · fast open-hand swipe to change tabs
+- **Two-hand steering:** pinch with both hands like gripping a wheel. Turn it to rotate the view, raise/lower both hands to tilt, spread/close to zoom
+- **Other gestures:** one-hand pinch + drag to rotate · fast open-hand swipe to change tabs
 - **Voice:** "zoom in/out", "rotate left/right/up/down", "top/front/side view", "reset", "next", "previous"
+- **Keyboard:** arrows rotate (Shift = bigger steps) · + / - zoom · T / F / S views · R reset · 1-4 tabs
+- **On-screen:** rotate / zoom / view buttons in the corner of the 3D stage; mouse drag and scroll also work
 
 ## Building in parallel
 `AGENTS.md`, `TASKS.md` and `.superset/` are set up for running several coding agents at once in Paradev, one worktree per task. See `docs/PARALLEL.md`.

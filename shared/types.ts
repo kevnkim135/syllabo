@@ -3,8 +3,11 @@
 export const LESSON_KINDS = ['timeline', 'topics', 'problems', 'visual'] as const;
 export type LessonKind = (typeof LESSON_KINDS)[number];
 
+export type TimelineEventType = 'discovery' | 'event' | 'figure';
+
 export interface TimelineEvent {
   year: string;
+  type?: TimelineEventType; // discovery = a finding, event = historical event, figure = a person's milestone
   title: string;
   figure?: string;
   detail: string;
@@ -19,7 +22,7 @@ export interface TopicNode {
 export interface Problem {
   prompt: string;
   solution: string;
-  difficulty: 'intro' | 'core' | 'edge';
+  difficulty: 'base' | 'intro' | 'core' | 'edge'; // base = trivial/base case, edge = borderline case
   why?: string;
 }
 
@@ -37,6 +40,22 @@ export interface SurfaceSpec {
   expr: string; // mathjs syntax in x and y, e.g. "sin(x) * cos(y)"
   xRange: [number, number];
   yRange: [number, number];
+}
+
+// ---- Topic drill-down (POST /api/expand) ----
+export interface TopicDetail {
+  title: string;
+  explanation: string; // 2-4 short paragraphs, plain text
+  keyPoints: string[];
+  example?: string;
+  subtopics: TopicNode[]; // clickable, expand again
+}
+
+export interface ExpandRequest {
+  subject: string;
+  topic: string; // the clicked topic's title
+  path?: string[]; // ancestors, root first, for context
+  level?: string;
 }
 
 export type BodyElement = { type: 'body'; id: string; label: string; x: number; y: number; radius?: number };
