@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# SanD Hacks 2026 rule: commits are only allowed Sat Nov 14 10:30 AM -> Sun Nov 15 12:00 PM (Pacific).
+# A commit outside that window disqualifies the team, so this hook refuses it.
+# Enable once per clone:  git config core.hooksPath .githooks
+# Override after the event: HACKATHON_WINDOW_OFF=1 git commit ...
+[ "${HACKATHON_WINDOW_OFF:-0}" = "1" ] && exit 0
+START="2026-11-14T10:30:00"
+END="2026-11-15T12:00:00"
+now=$(TZ=America/Los_Angeles date +%Y-%m-%dT%H:%M:%S)
+if [[ "$now" < "$START" || ! "$now" < "$END" ]]; then
+  echo "BLOCKED: it is $now Pacific. SanD Hacks only allows commits $START to $END Pacific." >&2
+  echo "Committing now would disqualify the team." >&2
+  exit 1
+fi
+end_s=$(TZ=America/Los_Angeles date -j -f %Y-%m-%dT%H:%M:%S "$END" +%s 2>/dev/null \
+  || TZ=America/Los_Angeles date -d "$END" +%s)
+mins=$(( (end_s - $(date +%s)) / 60 ))
+[ "$mins" -lt 90 ] && echo "warning: ~${mins} min left in the commit window (Devpost final due 12:00 PM)." >&2
+exit 0

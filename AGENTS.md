@@ -13,6 +13,12 @@ will be merged later. Merge pain comes from overlapping edits, so follow these r
   `docs/CONTRACTS.md`. Code against the contract, not against another agent's in-progress code.
   If the contract must change, say so in your final message instead of silently changing it.
 
+## Hackathon rules (SanD Hacks 2026, see `SUBMISSION.md`)
+- Commits are ONLY allowed Sat Nov 14 10:30 AM to Sun Nov 15 12:00 PM Pacific. A commit
+  outside that window disqualifies the team. If `.githooks/pre-commit` blocks you, stop; never
+  bypass it (`--no-verify`, `HACKATHON_WINDOW_OFF`) and never backdate commits.
+- Never commit secrets (`.env`, API keys). The repo will be public.
+
 ## Working style
 - Commit early and often on your own branch with clear messages. Never commit to `main`.
 - Never run `git checkout` to another branch, `git rebase`, or `git push --force`.

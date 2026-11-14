@@ -7,6 +7,8 @@ Type any subject and get a full, explorable lesson:
 - **Problems:** worked examples, including borderline and base cases
 - **Interactive model:** a 3D visual you control with **hand gestures and voice**. Chemistry gets molecules, multivariable calculus gets surfaces, physics gets force diagrams.
 
+Built at **SanD Hacks 2026** (UCSD). Submission checklist and deadlines: [SUBMISSION.md](SUBMISSION.md).
+
 ## Stack
 React + Vite + TypeScript · three.js via react-three-fiber · MediaPipe hand tracking · Web Speech API · Hono API server · Claude API
 
@@ -17,6 +19,7 @@ Requires Node 22+ and Chrome or Edge (needed for voice).
 npm install
 cp .env.example .env      # add your ANTHROPIC_API_KEY (optional, see below)
 npm run dev               # web on http://localhost:5173, API on :8787
+git config core.hooksPath .githooks   # blocks commits outside the hackathon window
 ```
 
 No key? The server runs in **mock mode** with canned data, so UI work can start right away.
