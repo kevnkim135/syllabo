@@ -1,38 +1,194 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { twoHandPose, wheelDelta } from '../src/utils/gestureMath';
+import {
+  assignSides,
+  classifyHand,
+  detectSwipe,
+  indexDirection,
+  isotropic,
+  landmarkFilter,
+  oneEuro,
+  openness,
+  pinchRatio,
+  rotationBetween,
+  straightness,
+  windingStats,
+  type SwipeSample,
+  type Vec3,
+} from '../src/utils/gestureMath';
+import { makeHand } from '../src/core/input/syntheticHand';
 
-const pose = (l: [number, number], r: [number, number]) => twoHandPose({ x: l[0], y: l[1] }, { x: r[0], y: r[1] });
+const near = (a: number, b: number, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${a} is not within ${eps} of ${b}`);
+const world = (o: Parameters<typeof makeHand>[0]) => makeHand(o).world!;
+const SWIPE = { windowMs: 350, minTravel: 0.3, minSpeed: 1.5, maxSideways: 0.5, minOpen: 0.6 };
 
-test('hand order does not change the pose', () => {
-  const a = twoHandPose({ x: 0.3, y: 0.5 }, { x: 0.7, y: 0.5 });
-  const b = twoHandPose({ x: 0.7, y: 0.5 }, { x: 0.3, y: 0.5 });
-  assert.deepEqual(a, b);
+// ---- One Euro filter ----
+test('one euro: a constant signal passes through unchanged', () => {
+  const f = oneEuro({ minCutoff: 1, beta: 0.5, dCutoff: 1 });
+  for (let i = 0; i < 30; i++) near(f(0.4, i / 30), 0.4);
 });
 
-test('holding still produces no commands (dead zones)', () => {
-  const p = pose([0.3, 0.5], [0.7, 0.5]);
-  assert.deepEqual(wheelDelta(p, p), { dx: 0, dy: 0, zoom: 1 });
-  const jitter = pose([0.3, 0.5005], [0.7, 0.4995]);
-  assert.equal(wheelDelta(p, jitter).dx, 0);
+test('one euro: jitter on a still value is strongly attenuated', () => {
+  const f = oneEuro({ minCutoff: 1.2, beta: 8, dCutoff: 1 });
+  let maxErr = 0;
+  for (let i = 0; i < 90; i++) {
+    const out = f(0.5 + (i % 2 ? 0.004 : -0.004), i / 30);
+    if (i > 10) maxErr = Math.max(maxErr, Math.abs(out - 0.5));
+  }
+  assert.ok(maxErr < 0.002, `jitter ${maxErr}`);
 });
 
-test('turning the wheel yaws, sign follows the turn direction', () => {
-  const level = pose([0.3, 0.5], [0.7, 0.5]);
-  const turned = pose([0.3, 0.45], [0.7, 0.55]);
-  const back = pose([0.3, 0.55], [0.7, 0.45]);
-  assert.ok(Math.abs(wheelDelta(level, turned).dx) > 0);
-  assert.equal(Math.sign(wheelDelta(level, turned).dx), -Math.sign(wheelDelta(level, back).dx));
+test('one euro: a fast move is followed with little lag', () => {
+  const f = oneEuro({ minCutoff: 1.2, beta: 8, dCutoff: 1 });
+  let out = 0;
+  for (let i = 0; i <= 15; i++) out = f(i * 0.05, i / 30); // 1.5 units/s
+  assert.ok(0.75 - out < 0.06, `lag ${0.75 - out}`);
 });
 
-test('raising both hands pitches, spreading hands zooms in', () => {
-  const base = pose([0.3, 0.5], [0.7, 0.5]);
-  assert.ok(wheelDelta(base, pose([0.3, 0.4], [0.7, 0.4])).dy < 0);
-  assert.ok(wheelDelta(base, pose([0.2, 0.5], [0.8, 0.5])).zoom < 1); // factor < 1 zooms in
-  assert.ok(wheelDelta(base, pose([0.4, 0.5], [0.6, 0.5])).zoom > 1);
+test('landmark filter keeps the array shape and restarts when the point count changes', () => {
+  const f = landmarkFilter({ minCutoff: 1, beta: 0, dCutoff: 1 });
+  const a = f([{ x: 0.1, y: 0.2, z: 0.3 }], 0);
+  assert.deepEqual(a, [{ x: 0.1, y: 0.2, z: 0.3 }]);
+  assert.equal(f(makeHand().image, 33).length, 21);
 });
 
-test('zoom per frame is clamped', () => {
-  const base = pose([0.3, 0.5], [0.7, 0.5]);
-  assert.equal(wheelDelta(base, pose([0.0, 0.5], [1.0, 0.5])).zoom, 0.92);
+// ---- hand shape ----
+test('straightness is 1 for a straight finger and low for a curled one', () => {
+  near(straightness(world({ curl: 0 }), 5), 1, 1e-9);
+  assert.ok(straightness(world({ curl: 1 }), 5) < 0.5);
+  assert.ok(straightness(world({ curl: 0.5 }), 9) < straightness(world({ curl: 0.2 }), 9));
+});
+
+test('poses: open, fist, point, pinch', () => {
+  assert.equal(classifyHand(world({ curl: 0, spread: 1 })).pose, 'open');
+  assert.equal(classifyHand(world({ curl: 0, spread: 0 })).pose, 'open');
+  assert.equal(classifyHand(world({ curl: 1 })).pose, 'fist');
+  assert.equal(classifyHand(world({ curl: [0, 1, 1, 1] })).pose, 'point');
+  assert.equal(classifyHand(world({ pinch: true })).pose, 'pinch');
+  assert.equal(classifyHand(world({ pinch: true, curl: [0, 0.8, 0.8, 0.8] })).pose, 'pinch');
+  assert.equal(classifyHand(world({ curl: [0, 0, 1, 1] })).pose, 'other'); // victory sign is nobody's gesture
+});
+
+test('poses do not depend on hand size or position, and work from image landmarks too', () => {
+  for (const o of [{ curl: 0 }, { curl: 1 }, { curl: [0, 1, 1, 1] as [number, number, number, number] }, { pinch: true }]) {
+    const expected = classifyHand(world(o)).pose;
+    for (const scale of [1, 2, 4]) {
+      const h = makeHand({ ...o, scale, at: [0.2, 0.4], aspect: 16 / 9 });
+      assert.equal(classifyHand(isotropic(h.image, 16 / 9)).pose, expected);
+    }
+  }
+});
+
+test('a fist is not a pinch, an open hand is not a pinch', () => {
+  assert.equal(classifyHand(world({ curl: 1 })).pinching, false);
+  assert.ok(pinchRatio(world({ curl: 0 })) > 0.8);
+  near(pinchRatio(world({ pinch: true })), 0, 1e-9);
+});
+
+test('pinch has hysteresis', () => {
+  // slide the thumb tip away from the index tip to a ratio between the on and off thresholds
+  const h = world({ pinch: true });
+  const size = Math.hypot(h[9].x - h[0].x, h[9].y - h[0].y);
+  h[4] = { x: h[8].x + 0.35 * size, y: h[8].y, z: h[8].z };
+  assert.equal(classifyHand(h, false).pinching, false);
+  assert.equal(classifyHand(h, true).pinching, true);
+});
+
+test('uniform: all fingers together (zoom) vs. one finger out (point)', () => {
+  assert.equal(classifyHand(world({ curl: 0 })).uniform, true);
+  assert.equal(classifyHand(world({ curl: 0.5 })).uniform, true);
+  assert.equal(classifyHand(world({ curl: 1 })).uniform, true);
+  assert.equal(classifyHand(world({ curl: [0, 1, 1, 1] })).uniform, false);
+});
+
+test('openness falls steadily as the hand closes, and is scale invariant', () => {
+  const steps = [0, 0.25, 0.5, 0.75, 1].map((c) => openness(world({ curl: c, spread: 1 - c })));
+  for (let i = 1; i < steps.length; i++) assert.ok(steps[i] < steps[i - 1], steps.join(' '));
+  assert.ok(steps[0] - steps[4] > 0.5, `range ${steps[0] - steps[4]}`);
+  // fingers straight but drawn together is also "less open" than a spread hand
+  assert.ok(openness(world({ curl: 0, spread: 0 })) < openness(world({ curl: 0, spread: 1 })));
+  const a = makeHand({ scale: 1 });
+  const b = makeHand({ scale: 3, at: [0.3, 0.3] });
+  near(openness(isotropic(a.image, 4 / 3)), openness(isotropic(b.image, 4 / 3)), 1e-9);
+});
+
+test('MediaPipe gesture hint only breaks ties', () => {
+  const half = world({ curl: 0.72 }); // geometry says "other"
+  assert.equal(classifyHand(half).pose, 'other');
+  assert.equal(classifyHand(half, false, { name: 'Closed_Fist', score: 0.9 }).pose, 'fist');
+  assert.equal(classifyHand(half, false, { name: 'Closed_Fist', score: 0.3 }).pose, 'other');
+  assert.equal(classifyHand(world({ curl: 0 }), false, { name: 'Closed_Fist', score: 0.9 }).pose, 'open');
+});
+
+// ---- handedness ----
+test('handedness: MediaPipe labels are swapped for a raw frame', () => {
+  assert.deepEqual(assignSides([{ label: 'Left', x: 0.3 }]), ['right']);
+  assert.deepEqual(assignSides([{ label: 'Right', x: 0.7 }, { label: 'Left', x: 0.3 }]), ['left', 'right']);
+  assert.deepEqual(assignSides([{ label: 'Left', x: 0.3 }], true), ['left']);
+});
+
+test('handedness: duplicate or missing labels fall back to position (user right = smaller raw x)', () => {
+  assert.deepEqual(assignSides([{ label: 'Left', x: 0.7 }, { label: 'Left', x: 0.3 }]), ['left', 'right']);
+  assert.deepEqual(assignSides([{ x: 0.2 }, { x: 0.8 }]), ['right', 'left']);
+});
+
+// ---- finger rotation ----
+test('index direction is reported in view space (x user-right, y up, z toward the user)', () => {
+  const up = indexDirection(world({ curl: [0, 1, 1, 1], indexDir: [0, -1, 0] }));
+  assert.deepEqual(up.map((v) => Math.round(v * 1e6) / 1e6 + 0), [0, 1, 0]);
+  // raw image +x is the user's LEFT
+  near(indexDirection(world({ indexDir: [1, 0, 0] }))[0], -1);
+  // toward the camera (smaller z) is away from the user
+  near(indexDirection(world({ indexDir: [0, 0, -1] }))[2], -1);
+});
+
+test('rotationBetween: axis by the right-hand rule, angle positive', () => {
+  const y: Vec3 = [0, 1, 0];
+  const r = rotationBetween(y, [-Math.sin(0.3), Math.cos(0.3), 0]); // up -> toward -x: counter-clockwise on screen
+  near(r.angle, 0.3);
+  near(r.axis[2], 1);
+  near(rotationBetween(y, [Math.sin(0.3), Math.cos(0.3), 0]).axis[2], -1); // clockwise on screen
+  near(rotationBetween(y, [0, Math.cos(0.2), Math.sin(0.2)]).axis[0], 1); // tip toward the user: about +x
+  near(rotationBetween(y, y).angle, 0);
+});
+
+// ---- twirl ----
+const circle = (turns: number, n = 40, r = 0.05, dir = 1) =>
+  Array.from({ length: n + 1 }, (_, i) => ({ x: 0.5 + r * Math.cos((dir * turns * 2 * Math.PI * i) / n), y: 0.5 + r * Math.sin((dir * turns * 2 * Math.PI * i) / n) }));
+
+test('winding: a full circle is about 2 PI, signed by direction, and round', () => {
+  const w = windingStats(circle(1));
+  near(w.winding, 2 * Math.PI, 0.2);
+  near(w.radius, 0.05, 0.005);
+  assert.ok(w.roundness > 0.9);
+  near(windingStats(circle(1, 40, 0.05, -1)).winding, -2 * Math.PI, 0.2);
+});
+
+test('winding: lines, wiggles and half circles are far from a full turn', () => {
+  const line = Array.from({ length: 30 }, (_, i) => ({ x: 0.2 + i * 0.02, y: 0.5 + i * 0.001 }));
+  const wiggle = Array.from({ length: 60 }, (_, i) => ({ x: 0.5 + 0.1 * Math.sin(i / 3), y: 0.5 + 0.002 * Math.cos(i) }));
+  assert.ok(Math.abs(windingStats(line).winding) < 3.5);
+  assert.ok(windingStats(line).fill < 0.1);
+  assert.ok(windingStats(wiggle).fill < 0.1);
+  assert.ok(Math.abs(windingStats(circle(0.5)).winding) < 4.5);
+  assert.ok(windingStats(circle(1)).fill > 0.9);
+  assert.equal(windingStats([]).winding, 0);
+});
+
+// ---- swipe ----
+const stroke = (dy: number, ms: number, opts: { dx?: number; open?: boolean; frames?: number } = {}): SwipeSample[] => {
+  const n = opts.frames ?? Math.max(2, Math.round(ms / 33));
+  return Array.from({ length: n + 1 }, (_, i) => ({ x: 0.6 + ((opts.dx ?? 0) * i) / n, y: 0.8 + (dy * i) / n, t: 1000 + (ms * i) / n, open: opts.open ?? true }));
+};
+
+test('swipe: hard fast vertical moves only', () => {
+  assert.equal(detectSwipe(stroke(-0.4, 180), SWIPE), 'up');
+  assert.equal(detectSwipe(stroke(0.4, 180), SWIPE), 'down');
+  assert.equal(detectSwipe(stroke(-0.4, 340, { frames: 30 }).slice(0, 20), SWIPE), null); // not far enough yet
+  assert.equal(detectSwipe(stroke(-0.4, 600), SWIPE), null); // too slow
+  assert.equal(detectSwipe(stroke(-0.2, 100), SWIPE), null); // too short
+  assert.equal(detectSwipe(stroke(-0.4, 180, { dx: 0.3 }), SWIPE), null); // diagonal
+  assert.equal(detectSwipe(stroke(0, 180, { dx: 0.5 }), SWIPE), null); // the old sideways swipe is gone
+  assert.equal(detectSwipe(stroke(-0.4, 180, { open: false }), SWIPE), null); // not an open hand
+  assert.equal(detectSwipe([], SWIPE), null);
 });
