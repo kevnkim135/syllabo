@@ -56,7 +56,7 @@ export function ScopeHub() {
       {sides[side].map(({ topic, i }, n, all) => {
         // Middle bubbles sit further out than the top and bottom ones, so the set fans around the centre.
         const t = all.length > 1 ? (n / (all.length - 1)) * 2 - 1 : 0;
-        const out = `${Math.cos((t * Math.PI) / 2) * 2.4}rem`;
+        const out = `${(Math.cos((t * Math.PI) / 2) * 2.6).toFixed(2)}vw`;
         return (
           <button
             key={topic}

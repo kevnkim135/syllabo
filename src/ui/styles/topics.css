@@ -16,10 +16,8 @@
 .hub-side { display: flex; flex-direction: column; justify-content: center; gap: clamp(1.4rem, 5vh, 3rem); min-width: 0; }
 .hub-side.left { align-items: flex-end; }
 .hub-side.right { align-items: flex-start; }
-.hub-branch { position: relative; max-width: 100%; border-radius: var(--pill); padding: 0.6rem 1.25rem; font-weight: 600; box-shadow: var(--shadow); animation: bloom 0.5s var(--ease) backwards; }
+.hub-branch { position: relative; max-width: 100%; border-radius: var(--radius); padding: 0.6rem 1.25rem; font-weight: 600; text-align: center; text-wrap: balance; box-shadow: var(--shadow); animation: bloom 0.5s var(--ease) backwards; }
 .hub-branch:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); background: var(--accent-soft); }
-.hub-side.left .hub-branch { text-align: right; }
-.hub-side.right .hub-branch { text-align: left; }
 
 /* ---------- Note sheet: an outline that grows in place ---------- */
 .sheet { max-width: 920px; margin: 0 auto; padding: 2rem 2.5rem 2.25rem; animation: rise 0.4s var(--ease); }
@@ -62,6 +60,7 @@
 .note-body .error { margin: 0.25rem 0; }
 
 @media (max-width: 1180px) {
-  .hub { column-gap: 2rem; grid-template-columns: minmax(0, 1fr) minmax(320px, 420px) minmax(0, 1fr); }
+  .hub { column-gap: 2.25rem; grid-template-columns: minmax(0, 1fr) minmax(320px, 420px) minmax(0, 1fr); }
+  .hub-core { padding-inline: 1.6rem; }
   .sheet { padding: 1.5rem 1.5rem 1.75rem; }
 }
