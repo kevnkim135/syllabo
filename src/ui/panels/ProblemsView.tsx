@@ -43,7 +43,7 @@ export function ProblemsView({ problems }: { problems: Problem[] }) {
       <SolveBar />
 
       {(jobs.length > 0 || solved.length > 0) && (
-        <section className="yours" aria-label="Your problems">
+        <section className="own" aria-label="Your problems">
           <h3>
             Your problems <span className="count">{solved.length}</span>
           </h3>

@@ -8,6 +8,7 @@ const SOURCE = { typed: 'typed', spoken: 'spoken', screenshot: 'screenshot' } as
 
 interface CardProps {
   p: Problem;
+  id?: string;
   n?: number;
   builds?: string[]; // explored topics this problem names
   origin?: Origin; // set for the student's own problems
@@ -15,13 +16,13 @@ interface CardProps {
   delay?: number; // entrance stagger, seconds
 }
 
-export function ProblemCard({ p, n, builds = [], origin, mine, delay = 0 }: CardProps) {
+export function ProblemCard({ p, id, n, builds = [], origin, mine, delay = 0 }: CardProps) {
   const steps = splitSteps(p.solution);
   const [shown, setShown] = useState(mine ? steps.length : 0); // the student asked for their own answer: show it all
   const total = steps.length;
 
   return (
-    <article className={`card problem ${mine ? 'mine' : ''}`} style={{ animationDelay: `${delay}s` }}>
+    <article id={id} className={`card problem ${mine ? 'mine' : ''}`} style={{ animationDelay: `${delay}s` }}>
       <header>
         {n !== undefined && <span className="num">{n}</span>}
         {mine && <span className="badge yours">yours{origin ? ` · ${SOURCE[origin.source]}` : ''}</span>}
@@ -62,7 +63,7 @@ export function ProblemCard({ p, n, builds = [], origin, mine, delay = 0 }: Card
               {total === 1 ? 'Show worked solution' : shown === 0 ? 'Show first step' : `Next step (${shown + 1} of ${total})`}
             </button>
           )}
-          {shown < total && total > 1 && (
+          {shown < total - 1 && (
             <button className="chip" onClick={() => setShown(total)}>
               Show all {total} steps
             </button>
