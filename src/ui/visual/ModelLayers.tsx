@@ -7,7 +7,7 @@ import { Molecule } from './Molecule';
 import { Surface } from './Surface';
 
 const FADE_S = 0.55;
-const easeOut = (t: number) => 1 - (1 - t) ** 3;
+const smooth = (t: number) => t * t * (3 - 2 * t);
 
 interface Layer {
   id: number;
@@ -69,7 +69,7 @@ function FadeLayer({ leaving, onGone, children }: { leaving: boolean; onGone: ()
     if (!g || settled.current) return;
     const step = Math.min(delta, 0.05) / FADE_S;
     t.current = leaving ? Math.max(0, t.current - step) : Math.min(1, t.current + step);
-    const e = easeOut(t.current);
+    const e = smooth(t.current);
     g.scale.setScalar(leaving ? 0.9 + 0.1 * e : 0.82 + 0.18 * e);
     g.visible = e > 0.001;
     setOpacity(g, e);

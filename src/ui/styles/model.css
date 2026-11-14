@@ -23,7 +23,7 @@
 
 /* ---------- Control bar: a slim column of icons that springs open into labelled controls ---------- */
 .controlbar {
-  --cell: 34px; --pad: 6px; --wide: 226px;
+  --cell: 34px; --pad: 6px; --wide: 232px;
   position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
   width: calc(var(--cell) + var(--pad) * 2 + 2px); padding: var(--pad);
   display: flex; flex-direction: column; gap: 2px; overflow: hidden; border-radius: var(--radius);

@@ -65,7 +65,7 @@ export function Surface({ spec }: { spec: SurfaceSpec }) {
         <meshBasicMaterial wireframe color={p.white} transparent opacity={0.14} />
       </mesh>
       <gridHelper args={[SIZE, 12, p.violet, p.lilac200]} />
-      <axesHelper args={[4]} ref={(a) => void a?.setColors(p.violet, p.forest, p.violet)} />
+      <axesHelper args={[2.6]} ref={(a) => void a?.setColors(p.violet, p.forest, p.violet)} />
     </group>
   );
 }
