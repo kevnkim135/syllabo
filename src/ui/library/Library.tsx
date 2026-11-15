@@ -105,7 +105,7 @@ function Card({ l, open, folders }: { l: SavedLesson; open: boolean; folders: { 
       <button className="lib-card-open" onClick={() => lesson.openSaved(l.id)}>
         <strong>{lessonTitle(l)}</strong>
         <span className="muted">
-          {l.level} · {l.models.length} model{l.models.length === 1 ? '' : 's'} · {ago(l.updatedAt)}
+          {l.models.length} model{l.models.length === 1 ? '' : 's'} · {ago(l.updatedAt)}
         </span>
         {open && <span className="lib-badge">open</span>}
       </button>

@@ -7,7 +7,7 @@ import type { IntentContext, IntentResult, TopicNode } from '../../shared/types'
 import { ruleIntent, matchTitle } from '../../shared/intentRules';
 import { fetchIntent } from './api';
 import { commands } from './commands';
-import { getLesson, getWorkspace, lesson } from './lesson';
+import { getLesson, getWorkspace, lesson, labFor } from './lesson';
 import { library, lessonTitle } from './library';
 
 export interface AssistantStatus {
@@ -109,6 +109,7 @@ export function perform({ intent }: IntentResult): boolean {
       return true;
     }
     case 'sandboxReact':
+      if (labFor(getLesson()) === 'none') return false; // reactions belong to the chemistry and physics labs
       lesson.sandboxReact(intent.condition);
       return inLesson;
     case 'sandboxPush': {
@@ -118,6 +119,7 @@ export function perform({ intent }: IntentResult): boolean {
       return true;
     }
     case 'sandboxSetting':
+      if (labFor(getLesson()) === 'none') return false; // no physics to switch outside a lab
       lesson.sandboxSetting(intent.setting, intent.on);
       return inLesson;
     case 'sandboxNew':

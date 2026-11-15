@@ -70,6 +70,8 @@ export interface ExpandRequest {
 export const BODY_SHAPES = [
   'ball', 'block', 'box', 'crate', 'car', 'truck', 'cart', 'plane', 'rocket', 'person', 'planet', 'sun', 'moon', 'satellite', 'boat',
   'pulley', 'spring', 'ramp', 'charge', 'ladder', 'wall', 'tank', 'cylinder', 'cone', 'tree', 'house', 'cannon', 'balloon', 'table',
+  // concept objects, for sandboxes outside the physics / chemistry lab
+  'node', 'chip', 'database', 'document',
 ] as const;
 export type BodyShape = (typeof BODY_SHAPES)[number];
 
@@ -138,7 +140,56 @@ export interface AnatomySpec {
   focus?: string[]; // part names to highlight first
 }
 
-export type VisualSpec = MoleculeSpec | SurfaceSpec | DiagramSpec | AnatomySpec;
+// ---- Networks: neural networks, LLMs / transformers, machine learning, graphs, trees, any node concept ----
+/** Hand-built, detailed network models for the most common machine-learning and graph topics. */
+export const NETWORK_MODELS = ['neural-network', 'transformer', 'cnn', 'rnn', 'decision-tree', 'graph'] as const;
+export type NetworkModel = (typeof NETWORK_MODELS)[number];
+/** neuron = glowing unit, token = a word tile, block = a big labeled stage, grid = an image / feature map / vector, bar = a probability, data = a small cube. */
+export const NODE_SHAPES = ['neuron', 'token', 'block', 'grid', 'bar', 'data'] as const;
+export type NodeShape = (typeof NODE_SHAPES)[number];
+export const NET_LAYOUTS = ['layers', 'tree', 'graph'] as const;
+export type NetLayout = (typeof NET_LAYOUTS)[number];
+export const EDGE_KINDS = ['flow', 'attention', 'skip', 'plain'] as const;
+export type EdgeKind = (typeof EDGE_KINDS)[number];
+
+export interface NetNode {
+  id: string;
+  label?: string;
+  group?: string; // the layer, block or cluster it belongs to (a NetGroup name)
+  shape?: NodeShape;
+  value?: number; // 0..1: activation (how brightly a neuron glows), or a bar's height (a probability)
+  color?: string;
+  size?: [number, number, number]; // block and grid only: width, height, depth
+  pos?: [number, number, number]; // explicit position; otherwise the layout places it
+  info?: string;
+}
+export interface NetEdge {
+  a: string;
+  b: string;
+  weight?: number; // -1..1: thickness is |weight|; negative weights are drawn in a second color
+  label?: string;
+  kind?: EdgeKind; // flow = signals travel along it, attention = a curved arc, skip = a residual connection
+}
+/** A named layer, block or cluster: one chip in the side panel, with what it does. */
+export interface NetGroup {
+  name: string;
+  info?: string;
+  color?: string;
+}
+export interface NetworkSpec {
+  kind: 'network';
+  title: string;
+  scene?: SceneKind;
+  model?: NetworkModel;
+  layout?: NetLayout; // layers: groups left to right; tree: top down along the edges; graph: spread in space
+  groups?: NetGroup[]; // in order (for "layers": input first)
+  nodes?: NetNode[];
+  edges?: NetEdge[];
+  notes?: Record<string, string>; // built-in models: group name -> what to say about it for this lesson
+  focus?: string[]; // group (or node label) names to highlight first
+}
+
+export type VisualSpec = MoleculeSpec | SurfaceSpec | DiagramSpec | AnatomySpec | NetworkSpec;
 
 export interface LessonMap {
   timeline: TimelineEvent[];
@@ -158,8 +209,13 @@ export interface LessonRequest {
 }
 
 // ---- Broad subject vs specific topic (POST /api/scope) ----
+/** What kind of lab the subject's sandbox is: real physics, chemistry, or neither (objects are only arranged). */
+export const LAB_KINDS = ['physics', 'chemistry', 'none'] as const;
+export type LabKind = (typeof LAB_KINDS)[number];
+
 export interface ScopeInfo {
   scope: 'broad' | 'specific';
+  lab?: LabKind; // which sandbox features fit this subject
   overview: string; // 1-2 sentences
   suggestions: string[]; // specific topics worth exploring inside it
 }

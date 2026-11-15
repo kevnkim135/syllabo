@@ -4,7 +4,8 @@
 // topic in one section is reflected in all four. Saved lessons (core/library.ts) stay in sync
 // automatically and reopen without generating anything again.
 import { useSyncExternalStore } from 'react';
-import type { LessonKind, LessonMap, Problem, SandboxSetting, ScopeInfo, VisualSpec } from '../../shared/types';
+import type { LessonKind, LessonMap, Problem, SandboxSetting, ScopeInfo, VisualSpec, LabKind } from '../../shared/types';
+import { labOf } from '../../shared/lab';
 import { fetchExamples, fetchLesson, fetchReact, fetchSandboxItem, fetchScope } from './api';
 import { commands } from './commands';
 import { library, lessonTitle, newId, type SandboxItem, type SandboxReaction, type SavedLesson } from './library';
@@ -411,13 +412,15 @@ export const lesson = {
       const id = s.id;
       ws = { ...ws, view: 'lesson' };
       update(id, (x) => ({ stageMode: 'sandbox', section: 'visual', sandbox: { ...x.sandbox, busy: 'add', error: null } }));
-      fetchSandboxItem(name.trim(), s.focus ? `${s.subject} (${s.focus})` : (s.subject ?? undefined), s.level)
+      const lab = labFor(s);
+      fetchSandboxItem(name.trim(), s.focus ? `${s.subject} (${s.focus})` : (s.subject ?? undefined), s.level, lab)
         .then((spec) =>
           update(id, (x) => {
             const items = [...x.sandbox.items];
             for (let k = 0; k < Math.max(1, Math.min(count, 6)); k++) {
-              const base = { id: newId(), name: spec.name || tidyName(name, name), pos: freeSlot(items), scale: 1 };
-              const pos: [number, number, number] = spec.kind === 'body' && !isCelestial(spec.body.shape) ? [base.pos[0], -2.6 + spec.body.radius, base.pos[2]] : base.pos;
+              const base = { id: newId(), name: spec.name || tidyName(name, name), pos: freeSlot(items, lab === 'none'), scale: 1 };
+              // in a physics or chemistry lab, bodies start resting on the bench; elsewhere everything simply floats in place
+              const pos: [number, number, number] = spec.kind === 'body' && lab !== 'none' && !isCelestial(spec.body.shape) ? [base.pos[0], -2.6 + spec.body.radius, base.pos[2]] : base.pos;
               items.push(spec.kind === 'molecule' ? { ...base, kind: 'molecule', molecule: spec.molecule } : { ...base, pos, kind: 'body', body: spec.body, vel: [0, 0, 0] });
             }
             // adding never changes the selection: selecting stays a deliberate act
@@ -429,6 +432,7 @@ export const lesson = {
   },
   /** Give bodies a shove (voice: "push the car right with 50 newtons"). Molecules just move a step. */
   sandboxPush(ids: string[], dir: MoveDirection, force?: number) {
+    if (labFor(active()) === 'none') return lesson.sandboxNudge(ids, dir); // nothing is thrown outside a physics lab: just move it
     withActive((s) => {
       const unit: Record<string, [number, number, number]> = { left: [-1, 0, 0], right: [1, 0, 0], up: [0, 1, 0], down: [0, -1, 0], closer: [0, 0, 1], farther: [0, 0, -1] };
       const items = s.sandbox.items.filter((i) => ids.includes(i.id));
@@ -468,7 +472,7 @@ export const lesson = {
       if (!same) update(s.id, { sandbox: { ...s.sandbox, contact: ids && ids.length ? ids : null } });
       // auto react: each new group of touching molecules is tried once (not again while it stays touching)
       const key = (ids ?? []).slice().sort().join();
-      if (s.sandbox.autoReact && ids && ids.length >= 2 && !s.sandbox.busy && autoTried.get(s.id) !== key && Date.now() > (autoQuiet.get(s.id) ?? 0)) {
+      if (s.sandbox.autoReact && labFor(s) !== 'none' && ids && ids.length >= 2 && !s.sandbox.busy && autoTried.get(s.id) !== key && Date.now() > (autoQuiet.get(s.id) ?? 0)) {
         autoTried.set(s.id, key);
         lesson.sandboxReact(s.sandbox.condition);
       }
@@ -656,6 +660,9 @@ function refillExamples(id: string, showFirst = false) {
     .finally(() => refilling.delete(id));
 }
 
+/** Which sandbox this lesson gets: physics, chemistry, or neither (objects are only arranged). */
+export const labFor = (s: Pick<LessonState, 'subject' | 'focus' | 'scope'>): LabKind => labOf(s.subject ?? '', s.focus, s.scope?.lab);
+
 // ---- sandbox helpers ----
 const autoTried = new Map<string, string>(); // lesson id -> the touching group auto react last tried
 const autoQuiet = new Map<string, number>(); // lesson id -> no auto react before this time (just reacted)
@@ -679,12 +686,15 @@ const tidyName = (title: string, asked: string) => {
   return name && name.length <= 40 ? name : asked.replace(/^./, (c) => c.toUpperCase());
 };
 /** Next free spot: a widening spiral on the bench, about 3 units apart. */
-function freeSlot(items: { pos: [number, number, number] }[]): [number, number, number] {
+function freeSlot(items: { pos: [number, number, number] }[], close = false): [number, number, number] {
+  // In a lab, things arrive far apart so nothing touches (or auto-reacts) on arrival. Where nothing reacts or
+  // collides ("close"), they can sit nearer, so a handful of objects all stay in view.
+  const [r0, grow, apart] = close ? [2.2, 1.3, 2.9] : [3, 2.4, 5.2];
   for (let k = 0; k < 60; k++) {
     const a = k * 2.4;
-    const r = k === 0 ? 0 : 3 + Math.sqrt(k) * 2.4;
+    const r = k === 0 ? 0 : r0 + Math.sqrt(k) * grow;
     const p: [number, number, number] = [Math.cos(a) * r, 0, Math.sin(a) * r * 0.8];
-    if (items.every((i) => Math.hypot(i.pos[0] - p[0], i.pos[2] - p[2]) > 5.2)) return p; // far apart: nothing touches (or auto-reacts) on arrival
+    if (items.every((i) => Math.hypot(i.pos[0] - p[0], i.pos[2] - p[2]) > apart)) return p;
   }
   return [0, 2, 0];
 }

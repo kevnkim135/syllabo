@@ -1,4 +1,5 @@
 // Canned responses so the UI works with no API key (MOCK mode).
+import { labHint } from '../shared/lab';
 import type { SandboxItemSpec, BodyShape, LessonKind, LessonMap, LessonRequest, MoleculeSpec, Problem, ReactionResult, ReactRequest, ScopeInfo, SolveRequest, TopicDetail, VisualSpec } from '../shared/types';
 
 const water: VisualSpec = {
@@ -106,9 +107,21 @@ const cell: VisualSpec = { kind: 'anatomy', title: 'An animal cell and its organ
 const neuron: VisualSpec = { kind: 'anatomy', title: 'A neuron: how signals travel', model: 'neuron' };
 const dna: VisualSpec = { kind: 'anatomy', title: 'DNA: the double helix and its base pairs', model: 'dna' };
 const heart: VisualSpec = { kind: 'anatomy', title: 'The heart: four chambers and great vessels', model: 'heart' };
+const NETWORKS: [RegExp, VisualSpec][] = [
+  [/llm|language model|transformer|gpt|attention|chatbot|token/, { kind: 'network', title: 'Inside a language model: predicting the next word', model: 'transformer', focus: ['Self-attention'] }],
+  [/convolution|cnn|image (?:recogn|classif)|computer vision/, { kind: 'network', title: 'A convolutional network classifying an image', model: 'cnn', focus: ['Convolution'] }],
+  [/recurrent|rnn|lstm|sequence model/, { kind: 'network', title: 'A recurrent network unrolled over time', model: 'rnn', focus: ['Hidden state'] }],
+  [/decision tree|random forest|classif/, { kind: 'network', title: 'A decision tree classifying iris flowers', model: 'decision-tree' }],
+  [/graph|dijkstra|shortest path|vertex|vertices|node|data structure|linked list|network theory/, { kind: 'network', title: 'A weighted graph and its shortest path', model: 'graph', focus: ['Shortest path A to F'] }],
+  [/neural|deep learning|machine learning|perceptron|backprop|artificial intelligence|\bai\b|\bml\b/, { kind: 'network', title: 'A neural network: layers of connected neurons', model: 'neural-network', focus: ['Hidden layer 1'] }],
+];
 const ANATOMY: [RegExp, VisualSpec][] = [[/neuron|nerve|synap/, neuron], [/brain|psych|neuro|cognit|memory|emotion/, brain], [/cell|organelle|mitochond/, cell], [/dna|gene|heredit|helix/, dna], [/heart|cardio|circulat|blood/, heart]];
 
 function pickVisual(subject: string, request = '', variant = 0): VisualSpec {
+  const asked = NETWORKS.find(([re]) => request && re.test(request.toLowerCase()));
+  if (asked) return asked[1];
+  const network = NETWORKS.find(([re]) => re.test(subject.toLowerCase()));
+  if (network) return variant ? NETWORKS[(NETWORKS.indexOf(network) + variant) % NETWORKS.length][1] : network[1];
   const anatomy = ANATOMY.find(([re]) => re.test(`${request} ${subject}`.toLowerCase()));
   if (anatomy) return variant ? ANATOMY[(ANATOMY.indexOf(anatomy) + variant) % ANATOMY.length][1] : anatomy[1];
   const r = request.toLowerCase();
@@ -171,6 +184,7 @@ export function scopeFixture(subject: string): ScopeInfo {
   const broad = BROAD.test(subject.trim().toLowerCase());
   return {
     scope: broad ? 'broad' : 'specific',
+    lab: labHint(subject) ?? 'none',
     overview: `Mock overview: ${subject} in one or two sentences. Add an API key for a real one.`,
     suggestions: broad ? ['Core definitions', 'Key theorem', 'Standard method', 'Classic application', 'Common pitfalls', 'Advanced extension'] : [],
   };
@@ -225,7 +239,8 @@ export function examplesFixture(subject: string, avoid: string[]): VisualSpec[] 
   const s = subject.toLowerCase();
   const anat = /brain|psych|neuro|bio|cell|gene|dna|heart|anatom|medic/.test(s);
   const group = /chem|molec|bond|atom/.test(s) ? VISUALS.molecule : /phys|force|motion|mechanic|diagram/.test(s) ? VISUALS.diagram : VISUALS.surface;
-  const all = anat ? [brain, neuron, cell, dna, heart] : group.map(([, v]) => v);
+  const net = NETWORKS.some(([re]) => re.test(s));
+  const all = net ? NETWORKS.map(([, v]) => v) : anat ? [brain, neuron, cell, dna, heart] : group.map(([, v]) => v);
   const fresh = all.filter((v) => !avoid.includes(v.title));
   return fresh.length ? fresh : all;
 }
@@ -237,6 +252,8 @@ const MOCK_BODIES: [RegExp, BodyShape, number, number, number?][] = [
   [/rocket/, 'rocket', 500, 0.9], [/person|man|woman|student/, 'person', 70, 0.8], [/proton/, 'charge', 1, 0.35, 1], [/electron/, 'charge', 1, 0.3, -1],
 ];
 
+const MOCK_CONCEPTS: [RegExp, BodyShape][] = [[/neuron|node|vertex|layer|token|concept|idea/, 'node'], [/chip|gpu|cpu|processor|model|computer/, 'chip'], [/data|memory|storage|dataset/, 'database'], [/document|book|text|law|file|paper/, 'document']];
+
 export function sandboxItemFixture(name: string): SandboxItemSpec {
   const n = name.toLowerCase();
   const hit = MOCK_BODIES.find(([re]) => re.test(n));
@@ -244,6 +261,8 @@ export function sandboxItemFixture(name: string): SandboxItemSpec {
     const [, shape, mass, radius, charge] = hit;
     return { kind: 'body', name: name.replace(/^./, (c) => c.toUpperCase()), body: { shape, mass, radius, charge, color: charge && charge < 0 ? '#3f7fd9' : undefined } };
   }
+  const concept = MOCK_CONCEPTS.find(([re]) => re.test(n));
+  if (concept) return { kind: 'body', name: name.replace(/^./, (c) => c.toUpperCase()), body: { shape: concept[1], mass: 1, radius: 0.55 } };
   const molecule = moleculeFixture(name);
   return { kind: 'molecule', name: molecule.title.split(/[(:]/)[0].trim(), molecule };
 }

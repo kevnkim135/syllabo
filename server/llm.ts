@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { SandboxItemSpec, VisualSpec, ExpandRequest, IntentRequest, IntentResult, LessonKind, LessonMap, LessonRequest, MoleculeSpec, Problem, ReactionResult, ReactRequest, ScopeInfo, SolveRequest, TopicDetail } from '../shared/types';
+import type { SandboxItemSpec, VisualSpec, ExpandRequest, IntentRequest, IntentResult, LessonKind, LessonMap, LessonRequest, MoleculeSpec, Problem, ReactionResult, ReactRequest, ScopeInfo, SolveRequest, TopicDetail, LabKind } from '../shared/types';
 import { ruleIntent } from '../shared/intentRules';
 import { buildExamplesPrompt, buildExpandPrompt, buildSandboxItemPrompt, buildIntentPrompt, buildMoleculePrompt, buildPrompt, buildReactPrompt, buildScopePrompt, buildSolvePrompt, SYSTEM } from './prompts';
 import { examplesFixture, expandFixture, fixture, sandboxItemFixture, moleculeFixture, reactFixture, scopeFixture, solveFixture } from './fixtures';
@@ -77,9 +77,9 @@ export function makeExamples(req: { subject: string; level?: string; focus?: str
 }
 
 /** Whatever the student asked to put in the sandbox: a molecule, or a physical body with mass. Cached. */
-export function makeSandboxItem(name: string, subject?: string, level?: string): Promise<SandboxItemSpec | undefined> {
+export function makeSandboxItem(name: string, subject?: string, level?: string, lab?: LabKind): Promise<SandboxItemSpec | undefined> {
   if (usingMock()) return mock(sandboxItemFixture(name));
-  return cached(keyOf('sandbox-item', name, subject), () => ask(buildSandboxItemPrompt(name, subject, level), validateSandboxItem, `sandbox item "${name}"`));
+  return cached(keyOf('sandbox-item', name, subject, lab), () => ask(buildSandboxItemPrompt(name, subject, level, lab), validateSandboxItem, `sandbox item "${name}"`));
 }
 
 /** One molecule by name, for the chemistry sandbox. Cached. */

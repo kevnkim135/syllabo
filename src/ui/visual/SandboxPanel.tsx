@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { lesson, useLesson } from '../../core/lesson';
+import { labFor, lesson, useLesson } from '../../core/lesson';
 import { MathText } from '../math/MathText';
 
 const CHEM = ['methane', 'oxygen', 'water', 'ethanol', 'sodium', 'chlorine', 'hydrogen', 'benzene'];
@@ -7,13 +7,17 @@ const PHYS = ['car', 'ball', 'crate', 'cart', 'sun', 'planet', 'proton', 'electr
 
 /** Side panel for the sandbox: add things, see and pick what is in the space, react molecules, read the physics. */
 export function SandboxPanel() {
-  const { sandbox, subject, focus } = useLesson();
+  const state = useLesson();
+  const { sandbox, subject, focus } = state;
+  const lab = labFor(state); // physics, chemistry, or neither: only the tools that fit the subject are shown
+  const plain = lab === 'none';
   const [name, setName] = useState('');
   const items = sandbox.items.filter((i) => !i.dying);
   const sel = sandbox.selected;
   const molecules = items.filter((i) => i.kind !== 'body');
   const bodies = items.filter((i) => i.kind === 'body');
-  const chem = /chem|molec|reaction|bond|acid|organic|atom/i.test(`${subject} ${focus ?? ''}`);
+  const chem = lab === 'chemistry';
+  const topic = focus ?? subject ?? 'this lesson';
   const contact = (sandbox.contact ?? []).map((id) => items.find((i) => i.id === id)?.name).filter(Boolean);
   const picked = items.filter((i) => sel.includes(i.id) && i.kind === 'body');
 
@@ -29,14 +33,16 @@ export function SandboxPanel() {
 
   return (
     <aside className="card guide sandbox-panel">
-      <h3>Sandbox</h3>
+      <h3>
+        Sandbox <span className="sb-lab">{plain ? 'Arrange' : chem ? 'Chemistry lab' : 'Physics lab'}</span>
+      </h3>
       <form className="ask sb-add" onSubmit={add}>
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder={chem ? 'Add: methane, oxygen…' : 'Add: a car, a ball, a planet…'} aria-label="Add to the sandbox" />
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder={plain ? `Add anything from ${topic}…` : chem ? 'Add: methane, oxygen…' : 'Add: a car, a ball, a planet…'} aria-label="Add to the sandbox" />
         <button type="submit" className="primary go" aria-label="Add" disabled={!name.trim() || sandbox.busy === 'add'}>
           {sandbox.busy === 'add' ? <span className="spinner" /> : '+'}
         </button>
       </form>
-      {!items.length && (
+      {!items.length && !plain && (
         <div className="chips sb-suggest">
           {(chem ? [...CHEM.slice(0, 6), ...PHYS.slice(0, 2)] : [...PHYS, ...CHEM.slice(0, 2)]).map((s) => (
             <button key={s} className="chip" onClick={() => lesson.sandboxAdd(s)}>
@@ -46,7 +52,7 @@ export function SandboxPanel() {
         </div>
       )}
 
-      {contact.length >= 2 && (
+      {!plain && contact.length >= 2 && (
         <div className="sb-contact">
           <p>
             <strong>{contact.join(' + ')}</strong> are touching.
@@ -65,7 +71,7 @@ export function SandboxPanel() {
               <li key={i.id} className={sel.includes(i.id) ? 'on' : ''}>
                 <button className="sb-pick" onClick={(e) => lesson.sandboxSelect([i.id], e.shiftKey || e.metaKey ? 'toggle' : 'set')} title="Click to select, shift-click to add">
                   <span className={`sb-dot ${i.kind === 'body' ? 'body' : ''}`} /> {i.name}
-                  {i.kind === 'body' && <span className="muted sb-mass">{fmtMass(i.body!.mass)}</span>}
+                  {i.kind === 'body' && !plain && <span className="muted sb-mass">{fmtMass(i.body!.mass)}</span>}
                 </button>
                 <button className="sb-x" onClick={() => lesson.sandboxRemove([i.id])} aria-label={`Remove ${i.name}`}>
                   ×
@@ -74,7 +80,7 @@ export function SandboxPanel() {
             ))}
           </ul>
 
-          {!!molecules.length && (
+          {!plain && !!molecules.length && (
             <form className="sb-react" onSubmit={react}>
               <input value={sandbox.condition} onChange={(e) => lesson.sandboxCondition(e.target.value)} placeholder="Condition: heat, a spark, catalyst…" aria-label="Reaction condition" />
               <button type="submit" className="primary" disabled={sandbox.busy === 'react'}>
@@ -86,7 +92,7 @@ export function SandboxPanel() {
             </form>
           )}
 
-          {!!bodies.length && (
+          {!plain && !!bodies.length && (
             <div className="sb-physics">
               <div className="sb-switches" role="group" aria-label="Physics">
                 {(
@@ -130,12 +136,12 @@ export function SandboxPanel() {
       )}
 
       {sandbox.error && <p className="error">{sandbox.error}</p>}
-      {sandbox.event && (
+      {!plain && sandbox.event && (
         <div className="sb-result yes">
           <MathText as="p" text={sandbox.event} />
         </div>
       )}
-      {sandbox.reaction && (
+      {!plain && sandbox.reaction && (
         <div className={`sb-result ${sandbox.reaction.result.reacts ? 'yes' : 'no'}`}>
           <MathText as="p" className="sb-eq" text={sandbox.reaction.result.reacts ? sandbox.reaction.result.equation : 'No reaction'} />
           <p className="muted">
@@ -148,12 +154,14 @@ export function SandboxPanel() {
 
       <h3>Try</h3>
       <ul className="muted sb-help">
-        {chem ? (
+        {plain ? (
+          <li>Say "add …" with anything from {topic}, then place things side by side to compare them. Objects stay exactly where you put them: there is no gravity, motion or reactions in this sandbox.</li>
+        ) : chem ? (
           <li>Say "add methane and two oxygens", then drag two molecules together, or say "react them with a spark".</li>
         ) : (
           <li>Say "add a car and a ball", "push the car right with 2000 newtons", "turn off friction", "make collisions elastic", or add a sun and a planet and push the planet sideways to make it orbit.</li>
         )}
-        <li>Mouse: click to select, shift-click for several, drag to move; let go while moving to throw.</li>
+        <li>Mouse: click to select, shift-click for several, drag to move{plain ? '' : '; let go while moving to throw'}.</li>
         <li>Hands: point at an object, then close your hand into a fist to select and carry it; open your hand to let go. Each hand can carry its own. Hold with a fist and circle with the other index finger to turn it. One open hand swiped left / right switches sandboxes; both hands open deselects everything.</li>
       </ul>
     </aside>

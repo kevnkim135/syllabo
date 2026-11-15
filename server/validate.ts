@@ -1,6 +1,6 @@
 // Runtime validation of model output against shared/types.ts. Returns a cleaned value or undefined.
 import { evaluate } from 'mathjs';
-import { ANATOMY_MODELS, BODY_SHAPES, LESSON_KINDS, PART_SHAPES, PART_SURFACES, SANDBOX_SETTINGS, SCENES, type AnatomyModel, type AnatomyPart, type PartShape, type PartSurface, type SandboxItemSpec, type SandboxSetting, type BodyShape, type MoleculeSpec, type ReactionResult, type SceneKind, type IntentResult, type LessonKind, type LessonMap, type Problem, type ScopeInfo, type TopicDetail, type TopicNode, type VisualSpec, type VoiceIntent } from '../shared/types';
+import { EDGE_KINDS, LAB_KINDS, NET_LAYOUTS, NETWORK_MODELS, NODE_SHAPES, type EdgeKind, type LabKind, type NetEdge, type NetGroup, type NetLayout, type NetNode, type NetworkModel, type NodeShape, ANATOMY_MODELS, BODY_SHAPES, LESSON_KINDS, PART_SHAPES, PART_SURFACES, SANDBOX_SETTINGS, SCENES, type AnatomyModel, type AnatomyPart, type PartShape, type PartSurface, type SandboxItemSpec, type SandboxSetting, type BodyShape, type MoleculeSpec, type ReactionResult, type SceneKind, type IntentResult, type LessonKind, type LessonMap, type Problem, type ScopeInfo, type TopicDetail, type TopicNode, type VisualSpec, type VoiceIntent } from '../shared/types';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
@@ -59,6 +59,38 @@ function visual(v: unknown): VisualSpec | undefined {
     const notes = isObj(v.notes) ? Object.fromEntries(Object.entries(v.notes).filter(([, t]) => str(t)).map(([k, t]) => [k, String(t).slice(0, 300)])) : undefined;
     const focus = Array.isArray(v.focus) ? v.focus.filter(str).slice(0, 6) : undefined;
     return { kind: 'anatomy', title: v.title, scene: scene(v.scene), model, parts: parts.length ? parts.slice(0, 40) : undefined, notes, focus } as VisualSpec;
+  }
+  if (v.kind === 'network') {
+    const vec3 = (x: unknown, lo: number, hi: number): [number, number, number] | undefined =>
+      Array.isArray(x) && x.length === 3 && x.every((n) => num(n)) ? (x.map((n) => Math.max(lo, Math.min(hi, n as number))) as [number, number, number]) : undefined;
+    const model = NETWORK_MODELS.includes(v.model as NetworkModel) ? (v.model as NetworkModel) : undefined;
+    const seen = new Set<string>();
+    const nodes = (Array.isArray(v.nodes) ? v.nodes : []).flatMap((n): NetNode[] => {
+      const id = isObj(n) && (str(n.id) || num(n.id)) ? String(n.id).trim().slice(0, 40) : '';
+      if (!isObj(n) || !id || seen.has(id)) return [];
+      seen.add(id);
+      return [{
+        id, label: str(n.label) ? n.label.trim().slice(0, 40) : undefined, group: str(n.group) ? n.group.trim().slice(0, 50) : undefined,
+        shape: NODE_SHAPES.includes(n.shape as NodeShape) ? (n.shape as NodeShape) : undefined, value: num(n.value) ? Math.max(0, Math.min(1, n.value)) : undefined,
+        color: str(n.color) ? n.color : undefined, size: vec3(n.size, 0.05, 12), pos: vec3(n.pos, -8, 8), info: str(n.info) ? n.info.trim().slice(0, 300) : undefined,
+      }];
+    }).slice(0, 90);
+    const ids = new Set(nodes.map((n) => n.id));
+    const edges = (Array.isArray(v.edges) ? v.edges : []).flatMap((e): NetEdge[] => {
+      if (!isObj(e)) return [];
+      const a = String(e.a ?? e.from ?? '').trim();
+      const b = String(e.b ?? e.to ?? '').trim();
+      if (!ids.has(a) || !ids.has(b) || a === b) return []; // dangling connections are dropped, not fatal
+      return [{ a, b, weight: num(e.weight) ? Math.max(-1, Math.min(1, e.weight)) : undefined, label: str(e.label) || num(e.label) ? String(e.label).trim().slice(0, 24) : undefined, kind: EDGE_KINDS.includes(e.kind as EdgeKind) ? (e.kind as EdgeKind) : undefined }];
+    }).slice(0, 400);
+    if (!model && nodes.length < 2) return undefined;
+    const groups = (Array.isArray(v.groups) ? v.groups : []).flatMap((g): NetGroup[] => (isObj(g) && str(g.name) ? [{ name: g.name.trim().slice(0, 50), info: str(g.info) ? g.info.trim().slice(0, 300) : undefined, color: str(g.color) ? g.color : undefined }] : [])).slice(0, 16);
+    const notes = isObj(v.notes) ? Object.fromEntries(Object.entries(v.notes).filter(([, t]) => str(t)).map(([k, t]) => [k, String(t).slice(0, 300)])) : undefined;
+    const focus = Array.isArray(v.focus) ? v.focus.filter(str).slice(0, 6) : undefined;
+    return {
+      kind: 'network', title: v.title, scene: scene(v.scene), model, layout: NET_LAYOUTS.includes(v.layout as NetLayout) ? (v.layout as NetLayout) : undefined,
+      groups: groups.length ? groups : undefined, nodes: nodes.length ? nodes : undefined, edges: edges.length ? edges : undefined, notes, focus,
+    } as VisualSpec;
   }
   if (v.kind === 'diagram') {
     if (!Array.isArray(v.elements)) return undefined;
@@ -144,6 +176,7 @@ export function validateScope(raw: unknown): ScopeInfo | undefined {
   if (!isObj(raw) || !str(raw.overview)) return undefined;
   return {
     scope: raw.scope === 'specific' ? 'specific' : 'broad',
+    lab: LAB_KINDS.includes(raw.lab as LabKind) ? (raw.lab as LabKind) : undefined,
     overview: raw.overview,
     suggestions: Array.isArray(raw.suggestions) ? raw.suggestions.filter(str).slice(0, 8) : [],
   };

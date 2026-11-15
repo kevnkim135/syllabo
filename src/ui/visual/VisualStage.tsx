@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import type * as THREE from 'three';
 import type { VisualSpec } from '../../../shared/types';
-import { lesson, useLesson } from '../../core/lesson';
+import { labFor, lesson, useLesson } from '../../core/lesson';
 import { GESTURE } from '../../core/input/gestureEngine';
 import { AskModel } from './AskModel';
 import { CameraRig } from './CameraRig';
@@ -13,15 +13,19 @@ import { ModelGallery } from './ModelGallery';
 import { ModelLayers } from './ModelLayers';
 import { SandboxPanel } from './SandboxPanel';
 import { AnatomyPanel } from './anatomy/AnatomyPanel';
+import { NetworkPanel } from './network/NetworkPanel';
 import { SandboxScene } from './SandboxScene';
 import { SandboxGallery } from './SandboxGallery';
 
 /** The 3D stage. It stays mounted for the whole lesson; `paused` stops rendering and input while hidden. */
 export function VisualStage({ spec, paused = false }: { spec: VisualSpec | null; paused?: boolean }) {
-  const { loading, visualRequest, stageMode, sandbox, sandboxIndex } = useLesson();
+  const state = useLesson();
+  const { loading, visualRequest, stageMode, sandbox, sandboxIndex } = state;
+  const lab = labFor(state);
   const box = stageMode === 'sandbox';
   const busy = box ? !!sandbox.busy : !!loading.visual;
   const orient = useRef<THREE.Group>(null);
+  const net = spec?.kind === 'network';
   // In the sandbox, pointing and pinching only select, carry and rotate: no hold-zoom poses, no twirl.
   useEffect(() => {
     GESTURE.directManipulation = box && !paused;
@@ -29,7 +33,8 @@ export function VisualStage({ spec, paused = false }: { spec: VisualSpec | null;
       GESTURE.directManipulation = false;
     };
   }, [box, paused]);
-  const scene = box ? 'lab' : (spec?.scene ?? (spec?.kind === 'molecule' ? 'lab' : 'plain'));
+  // the sandbox is a lab bench only for physics and chemistry; elsewhere it is an empty space to arrange things in
+  const scene = box ? (lab === 'none' ? 'plain' : 'lab') : (spec?.scene ?? (spec?.kind === 'molecule' ? 'lab' : 'plain'));
 
   return (
     <div className="stage-layout">
@@ -50,7 +55,15 @@ export function VisualStage({ spec, paused = false }: { spec: VisualSpec | null;
           ) : (
             <group ref={orient}>{spec && <ModelLayers spec={spec} />}</group>
           )}
-          <CameraRig resetKey={box ? 'sandbox' : spec} active={!paused} orient={orient} homeRadius={box ? 10.5 : undefined} />
+          {/* networks are wide, layered pictures: start further back and nearly face on, so the whole thing is in view */}
+          <CameraRig
+            resetKey={box ? 'sandbox' : spec}
+            active={!paused}
+            orient={orient}
+            homeRadius={box ? 10.5 : net ? 12.5 : undefined}
+            homePhi={!box && net ? 1.3 : undefined}
+            homeTheta={!box && net ? 0.42 : undefined}
+          />
         </Canvas>
 
         <div key={box ? 'sandbox' : spec?.title} className="stage-title">
@@ -67,7 +80,7 @@ export function VisualStage({ spec, paused = false }: { spec: VisualSpec | null;
         {busy && (
           <div className="stage-status" role="status">
             <span className="spinner" />
-            {box ? (sandbox.busy === 'react' ? 'Running the reaction…' : 'Building the molecule…') : visualRequest ? `Building ${visualRequest}…` : 'Building a new model…'}
+            {box ? (sandbox.busy === 'react' ? 'Running the reaction…' : lab === 'chemistry' ? 'Building the molecule…' : 'Adding it to the sandbox…') : visualRequest ? `Building ${visualRequest}…` : 'Building a new model…'}
           </div>
         )}
         {box ? <SandboxGallery /> : <ModelGallery />}
@@ -79,6 +92,11 @@ export function VisualStage({ spec, paused = false }: { spec: VisualSpec | null;
       ) : spec?.kind === 'anatomy' ? (
         <div className="side-stack">
           <AnatomyPanel spec={spec} />
+          <GestureGuide />
+        </div>
+      ) : spec?.kind === 'network' ? (
+        <div className="side-stack">
+          <NetworkPanel spec={spec} />
           <GestureGuide />
         </div>
       ) : (

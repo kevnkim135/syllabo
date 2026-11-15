@@ -22,7 +22,7 @@ const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
  * `rotateAxis` turns the model group (`orient`) about an axis given in view space, so the model follows
  * the axis the finger circles whatever angle the camera is at. Views and reset straighten it again.
  */
-export function CameraRig({ resetKey, active, orient, homeRadius = HOME.radius }: { resetKey: unknown; active: boolean; orient: RefObject<THREE.Group | null>; homeRadius?: number }) {
+export function CameraRig({ resetKey, active, orient, homeRadius = HOME.radius, homePhi = HOME.phi, homeTheta = HOME.theta }: { resetKey: unknown; active: boolean; orient: RefObject<THREE.Group | null>; homeRadius?: number; homePhi?: number; homeTheta?: number }) {
   const controls = useRef<ComponentRef<typeof OrbitControls>>(null);
   const camera = useThree((s) => s.camera);
   const dom = useThree((s) => s.gl.domElement);
@@ -59,11 +59,14 @@ export function CameraRig({ resetKey, active, orient, homeRadius = HOME.radius }
     rig.orient.identity();
   };
 
+  const homeRef = useRef<[number, number, number]>([homeRadius, homePhi, homeTheta]);
+  homeRef.current = [homeRadius, homePhi, homeTheta];
+
   // New model: glide back to the default angle (snap only on the very first frame).
   useEffect(() => {
     if (!begin()) return;
     rig.target.set(0, 0, 0);
-    aim(homeRadius, HOME.phi, HOME.theta);
+    aim(homeRadius, homePhi, homeTheta);
     if (!rig.mounted) {
       rig.mounted = true;
       rig.cur.copy(rig.goal);
@@ -104,7 +107,7 @@ export function CameraRig({ resetKey, active, orient, homeRadius = HOME.radius }
           case 'reset':
             if (!begin()) return;
             rig.target.set(0, 0, 0);
-            aim(homeRadius, HOME.phi, HOME.theta);
+            aim(...homeRef.current); // the current model's home, not the one from when this listener was made
             break;
         }
       }),

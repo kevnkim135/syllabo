@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import { commands, type Hand } from '../../core/commands';
-import { isCelestial, lesson, useLesson } from '../../core/lesson';
+import { isCelestial, labFor, lesson, useLesson } from '../../core/lesson';
 import type { SandboxItem } from '../../core/library';
 import { Label } from './Label';
 import { Molecule } from './Molecule';
@@ -83,7 +83,13 @@ function rimMaterial() {
  *   thrown: a body released while moving keeps that velocity.
  */
 export function SandboxScene() {
-  const { sandbox } = useLesson();
+  const state = useLesson();
+  const { sandbox } = state;
+  // Outside a physics or chemistry lab nothing simulates: objects stay where they are put (no gravity, no
+  // throwing, no collisions, no velocity arrows, no reactions).
+  const still = labFor(state) === 'none';
+  const stillRef = useRef(still);
+  stillRef.current = still;
   const camera = useThree((s) => s.camera);
   const gl = useThree((s) => s.gl);
   const controls = useThree((s) => s.controls) as unknown as { enabled: boolean } | null;
@@ -180,7 +186,8 @@ export function SandboxScene() {
       const s = sims.current.get(id);
       if (s) {
         s.pos.add(d.offset);
-        s.vel.copy(v);
+        if (stillRef.current) s.vel.set(0, 0, 0); // put down, not thrown
+        else s.vel.copy(v);
       } else molecules.push(id);
     }
     if (molecules.length && d.offset.lengthSq() > 1e-6) lesson.sandboxMove(molecules, [d.offset.x, d.offset.y, d.offset.z]);
@@ -225,7 +232,7 @@ export function SandboxScene() {
           const now = performance.now();
           if (now - (lastTap.current.get(cmd.hand) ?? 0) < 350) return; // one click per pinch, even if it flickers
           lastTap.current.set(cmd.hand, now);
-          if (id && contact?.includes(id)) lesson.sandboxReact(); // tapping touching molecules confirms the reaction
+          if (id && contact?.includes(id) && !stillRef.current) lesson.sandboxReact(); // tapping touching molecules confirms the reaction
           else if (id && p?.wasSelected) lesson.sandboxSelect([id], 'toggle'); // click a selected object again to deselect
           else if (!id) lesson.sandboxSelect([], 'set'); // click empty space to clear
         } else if (cmd.type === 'grab') {
@@ -275,7 +282,7 @@ export function SandboxScene() {
             spin.current = null;
           }, 500);
         } else if (cmd.type === 'impulse') {
-          for (const id of cmd.ids) sims.current.get(id)?.vel.add(new THREE.Vector3(...cmd.dv));
+          if (!stillRef.current) for (const id of cmd.ids) sims.current.get(id)?.vel.add(new THREE.Vector3(...cmd.dv));
         }
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -294,7 +301,8 @@ export function SandboxScene() {
     const list = items.current.filter((i) => !i.dying || groups.current.has(i.id));
 
     // ---- physics for bodies, in small substeps so orbits and fast collisions stay stable ----
-    const bodies = list.filter((i) => isBody(i) && !i.dying && !dragged.has(i.id) && sims.current.has(i.id));
+    const bodies = still ? [] : list.filter((i) => isBody(i) && !i.dying && !dragged.has(i.id) && sims.current.has(i.id));
+    if (still) for (const s of sims.current.values()) s.vel.set(0, 0, 0);
     const bounce = sandbox.elastic ? 0.95 : BOUNCE;
     const steps = Math.max(1, Math.ceil(frameDt / (1 / 240)));
     const dt = frameDt / steps;
@@ -400,13 +408,13 @@ export function SandboxScene() {
       if (arrow) {
         const v = sims.current.get(it.id)?.vel;
         const speed = v ? v.length() : 0;
-        arrow.visible = speed > 0.3 && !off;
+        arrow.visible = !still && speed > 0.3 && !off;
         if (v && arrow.visible) arrow.setDirection(v.clone().normalize()), arrow.setLength(Math.min(3, 0.4 + speed * 0.3), 0.25, 0.16);
       }
     }
 
     // ---- molecules touching: offer to react ----
-    const mols = list.filter((i) => !isBody(i) && !i.dying);
+    const mols = still ? [] : list.filter((i) => !isBody(i) && !i.dying);
     const touching = new Set<string>();
     for (let a = 0; a < mols.length; a++) {
       for (let b = a + 1; b < mols.length; b++) {

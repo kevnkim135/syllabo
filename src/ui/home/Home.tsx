@@ -1,14 +1,12 @@
 import { plainMath } from '../math/MathText';
 import { useState, type FormEvent } from 'react';
-import { lesson, useLesson, useWorkspace } from '../../core/lesson';
+import { lesson, useWorkspace } from '../../core/lesson';
 import { lessonTitle, useLibrary } from '../../core/library';
 import { DeltaField } from './DeltaField';
 
-export const LEVELS = ['middle school', 'high school', 'undergraduate', 'graduate'];
 const EXAMPLES = ['Organic chemistry', 'Multivariable calculus', 'Projectile motion', 'Chain rule'];
 
 export function Home() {
-  const { level } = useLesson();
   const { tabs } = useWorkspace();
   const { lessons } = useLibrary();
   const recent = lessons.filter((l) => !tabs.some((t) => t.id === l.id)).slice(0, 4);
@@ -28,11 +26,6 @@ export function Home() {
         </h1>
         <form className="ask" onSubmit={submit}>
           <input autoFocus value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="What do you want to learn?" aria-label="Topic" />
-          <select value={level} onChange={(e) => lesson.setLevel(e.target.value)} aria-label="Level">
-            {LEVELS.map((l) => (
-              <option key={l}>{l}</option>
-            ))}
-          </select>
           <button type="submit" className="primary go" aria-label="Start lesson">
             ↑
           </button>

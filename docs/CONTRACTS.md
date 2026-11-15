@@ -13,7 +13,7 @@
   - `request` (visual): free text such as "benzene"; `variant` (visual): 1, 2, ... for a different example.
 - `POST /api/expand` body `{ subject, topic, path?: string[], level? }` -> `TopicDetail`
   `{ title, explanation, keyPoints[], example?, subtopics: TopicNode[] }`
-- `POST /api/scope` body `{ subject, level? }` -> `ScopeInfo` `{ scope: "broad"|"specific", overview, suggestions[] }`
+- `POST /api/scope` body `{ subject, level? }` -> `ScopeInfo` `{ scope: "broad"|"specific", lab?: "physics"|"chemistry"|"none", overview, suggestions[] }` (`lab` picks which sandbox features apply)
 - `POST /api/solve` body `SolveRequest` `{ subject, level?, focus?, question?, image?: { mediaType, data } }`
   (base64 PNG/JPEG/WebP/GIF under 5 MB; needs a question or an image) -> `Problem`
 

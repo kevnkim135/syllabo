@@ -1,4 +1,4 @@
-import type { ExpandRequest, IntentRequest, LessonKind, LessonRequest, SolveRequest } from '../shared/types';
+import type { ExpandRequest, IntentRequest, LabKind, LessonKind, LessonRequest, SolveRequest } from '../shared/types';
 
 export const SYSTEM = `You are an expert teacher and curriculum designer.
 Be accurate and prefer well-established facts, names and dates.
@@ -37,7 +37,20 @@ Write every mathematical expression in LaTeX between $...$ (inline) or $$...$$ (
 {"kind": "anatomy", "title": "...", "parts": [{"name": "Chloroplast", "shape": "ellipsoid" | "blob" | "sphere" | "capsule" | "cylinder" | "cone" | "torus" | "box" | "tube", "position": [x, y, z], "size": [sx, sy, sz], "rotation": [0, 0, 0], "color": "#3f8f4e", "surface": "smooth" | "folded" | "bumpy" | "glossy" | "translucent", "info": "one sentence on what it does"}]}
   6-20 parts within -4..4; "tube" parts also take "path": [[x,y,z], ...] (vessels, nerves, roots); put inner parts inside a "translucent" outer part.
 
-4. Physics or anything else -> a labeled diagram drawn like a textbook figure, coordinates within -5..5 (x right, y up):
+4. Machine learning, neural networks, deep learning, language models (LLMs, transformers, GPT), AI, and any concept made of nodes and connections (graphs, trees, data structures, graph algorithms, computer or social networks, state machines, flowcharts of a pipeline) -> a network:
+{"kind": "network", "title": "...", "model": "transformer", "focus": ["Self-attention"], "notes": {"Self-attention": "why this part matters for the lesson"}}
+- "model" is a detailed, animated built-in: "neural-network" (a feed-forward net; parts: Input layer, Hidden layer 1, Hidden layer 2, Output layer), "transformer" (one layer of a language model predicting the next word; parts: Input tokens, Embeddings, Self-attention, Feed-forward network, Stacked layers, Next-token probabilities), "cnn" (image classifier; parts: Input image, Convolution, Pooling, Fully connected, Output classes), "rnn" (unrolled over time; parts: Inputs over time, Hidden state, Outputs), "decision-tree" (parts: Decision nodes, Leaves), "graph" (a weighted graph with a shortest path; parts: Shortest path A to F, Other vertices). Use one whenever it fits, with "focus" and "notes" tailored to the topic.
+- Otherwise compose it yourself (a linked list, a binary search tree, a GAN, an autoencoder, backpropagation, k-means clusters, a Markov chain, a hash table, the internet's routers):
+{"kind": "network", "title": "...", "layout": "layers" | "tree" | "graph",
+ "groups": [{"name": "Encoder", "color": "#4f8fe8", "info": "one sentence on what this layer or cluster does"}],
+ "nodes": [{"id": "e1", "group": "Encoder", "label": "optional short text", "shape": "neuron" | "token" | "block" | "grid" | "bar" | "data", "value": 0.8, "info": "optional"}],
+ "edges": [{"a": "e1", "b": "z1", "weight": 0.7, "kind": "flow" | "attention" | "skip" | "plain", "label": "optional short text"}]}
+  "layers" puts the groups left to right in the order listed (input first) with each group's nodes in a column; "tree" runs top down along the edges (a to b is parent to child); "graph" spreads the nodes in space.
+  Shapes: "neuron" a glowing unit ("value" 0-1 is its activation), "token" a tile showing its label (words, keys, values, questions), "grid" an image, feature map or vector, "bar" a probability ("value" 0-1 is its height), "data" a small cube, "block" a large labeled stage.
+  Edges: "weight" from -1 to 1 sets thickness (negative weights are drawn in a second color); "flow" edges carry moving signals in the direction a to b, "attention" is a curved arc, "skip" a residual connection, "plain" a static link. 4-60 nodes; every edge must join two existing node ids; label only what helps (inputs, outputs, tokens), not every hidden neuron.
+- A loss landscape or gradient descent is better as a surface (shape 2).
+
+5. Physics or anything else -> a labeled diagram drawn like a textbook figure, coordinates within -5..5 (x right, y up):
 {"kind": "diagram", "title": "...", "scene": "ground", "ground": -2, "elements": [
   {"type": "body", "id": "car", "label": "Car (1200 kg)", "x": -4, "y": -1.6, "shape": "car", "motion": {"vx": 2, "vy": 0, "ax": 0.5, "ay": 0, "duration": 3}},
   {"type": "vector", "from": "car", "label": "Friction", "dx": -1.2, "dy": 0},
@@ -74,8 +87,10 @@ Decide whether it is "broad" (a whole subject, field or course, e.g. "physics", 
 
 Produce a JSON object:
 {"scope": "broad" | "specific",
+ "lab": "physics" | "chemistry" | "none",
  "overview": "a very brief 1-2 sentence overview",
- "suggestions": ["6-8 specific topics inside it worth exploring, 1-4 words each"]}`;
+ "suggestions": ["6-8 specific topics inside it worth exploring, 1-4 words each"]}
+"lab" says what a hands-on 3D sandbox for this subject should simulate: "physics" when objects should move, fall, collide and be pushed (mechanics, forces, motion, orbits, electricity, engineering), "chemistry" when molecules should be combined and reacted, "none" for everything else (biology, medicine, psychology, history, economics, computer science, machine learning, pure math, languages...), where objects are only placed and arranged.`;
 }
 
 export function buildSolvePrompt({ subject, level = 'high school', focus, question }: SolveRequest, hasImage: boolean) {
@@ -185,17 +200,18 @@ Each element uses exactly one of these shapes:
 ${SCHEMAS.visual.replace(/^A JSON object describing ONE interactive 3D model that best illustrates a core idea of the subject\. Pick exactly one shape:\n\n/, '')}`;
 }
 
-const BODY = 'ball, block, box, crate, car, truck, cart, plane, rocket, person, planet, sun, moon, satellite, boat, pulley, spring, ramp, charge, ladder, wall, tank, cylinder, cone, tree, house, cannon, balloon, table';
+const BODY = 'ball, block, box, crate, car, truck, cart, plane, rocket, person, planet, sun, moon, satellite, boat, pulley, spring, ramp, charge, ladder, wall, tank, cylinder, cone, tree, house, cannon, balloon, table, node, chip, database, document';
 
-export function buildSandboxItemPrompt(name: string, subject = '', level = 'high school') {
-  return `A ${level} student studying "${subject || 'science'}" wants to put "${name}" into a 3D sandbox where things can be moved, pushed, collided and reacted.
+export function buildSandboxItemPrompt(name: string, subject = '', level = 'high school', lab: LabKind = 'physics') {
+  const what = lab === 'none' ? 'a 3D sandbox where things are placed side by side, arranged and compared (nothing moves, falls or reacts here)' : 'a 3D sandbox where things can be moved, pushed, collided and reacted';
+  return `A ${level} student studying "${subject || 'science'}" wants to put "${name}" into ${what}.
 
 If it is a chemical substance, return a molecule with realistic 3D geometry (angstroms, hydrogens included, bond order 2 or 3 where real):
 {"kind": "molecule", "name": "Methane", "molecule": {"kind": "molecule", "title": "Methane (CH4)", "atoms": [{"element": "C", "x": 0, "y": 0, "z": 0}], "bonds": [{"a": 0, "b": 1, "order": 1}]}}
 
 Otherwise return a physical body:
 {"kind": "body", "name": "Car", "body": {"shape": "car", "mass": 1200, "radius": 1.2, "charge": 0}}
-- shape: one of ${BODY}
+- shape: one of ${BODY}; for ideas rather than physical things use "node" (a unit, a neuron, a vertex, a person in a network, an abstract concept), "chip" (a processor, a model, hardware), "database" (stored data, a dataset, memory) or "document" (a text, a law, a file, a book)
 - mass in kg, realistic for the object (a tennis ball 0.06, a person 70, a car 1200; for planets and stars use a relative mass so a sun is about 1000 and a planet about 1-10)
 - radius in scene units between 0.25 and 1.6, so objects of very different real size still fit on one bench
 - charge: for charged particles (proton +1, electron -1, an ion), else 0`;

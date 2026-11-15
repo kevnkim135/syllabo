@@ -1,7 +1,7 @@
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono, type Context } from 'hono';
-import { IMAGE_TYPES, LESSON_KINDS, type ExpandRequest, type IntentContext, type IntentRequest, type LessonRequest, type ReactRequest, type SolveRequest } from '../shared/types';
+import { LAB_KINDS, IMAGE_TYPES, LESSON_KINDS, type ExpandRequest, type IntentContext, type IntentRequest, type LessonRequest, type ReactRequest, type SolveRequest } from '../shared/types';
 import { classifyScope, expandTopic, generateLesson, makeExamples, makeMolecule, makeSandboxItem, react, resolveIntent, solveProblem, usingMock } from './llm';
 
 try {
@@ -103,10 +103,10 @@ app.post('/api/examples', async (c) => {
 });
 
 app.post('/api/sandbox-item', async (c) => {
-  const b = await json<{ name: string; subject: string; level: string }>(c);
+  const b = await json<{ name: string; subject: string; level: string; lab: string }>(c);
   const name = text(b.name, 80);
   if (!name) return c.json({ error: 'name is required' }, 400);
-  const data = await makeSandboxItem(name, text(b.subject), text(b.level));
+  const data = await makeSandboxItem(name, text(b.subject), text(b.level), LAB_KINDS.find((l) => l === b.lab));
   if (data === undefined) return c.json({ error: invalid }, 502);
   return c.json(data);
 });

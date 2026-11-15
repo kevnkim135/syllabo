@@ -46,3 +46,55 @@ test('LaTeX with single backslashes in JSON is recovered, not thrown away', asyn
   assert.equal(v.c, 'line\nbreak');
   assert.equal(v.d, '$\\pi$');
 });
+
+test('network models: built-ins pass, composed networks are cleaned, dangling edges dropped', async () => {
+  const builtin = validate('visual', { kind: 'network', title: 'LLM', model: 'transformer', focus: ['Self-attention'] });
+  assert.equal(builtin?.kind, 'network');
+  const made = validate('visual', {
+    kind: 'network', title: 'Autoencoder', layout: 'layers',
+    groups: [{ name: 'Encoder', info: 'compresses' }, { name: 'Decoder' }],
+    nodes: [{ id: 'a', group: 'Encoder', shape: 'neuron', value: 3 }, { id: 'a', group: 'Encoder' }, { id: 'b', group: 'Decoder', shape: 'nonsense' }, { nope: 1 }],
+    edges: [{ a: 'a', b: 'b', weight: -5, kind: 'flow' }, { from: 'a', to: 'b' }, { a: 'a', b: 'ghost' }],
+  });
+  assert.ok(made && made.kind === 'network');
+  assert.deepEqual(made.nodes?.map((n) => n.id), ['a', 'b'], 'duplicate and malformed nodes dropped');
+  assert.equal(made.nodes?.[0].value, 1);
+  assert.equal(made.nodes?.[1].shape, undefined);
+  assert.equal(made.edges?.length, 2, 'the edge to a missing node is dropped');
+  assert.equal(made.edges?.[0].weight, -1);
+  assert.equal(validate('visual', { kind: 'network', title: 'Empty', nodes: [{ id: 'x' }] }), undefined, 'needs a built-in or at least two nodes');
+});
+
+test('built-in networks are well formed and every node gets a place', async () => {
+  const { NETWORK_MODELS } = await import('../shared/types');
+  const { builtinNetwork, partOf } = await import('../src/ui/visual/network/builtins');
+  const { layoutNetwork } = await import('../src/ui/visual/network/layout');
+  for (const model of NETWORK_MODELS) {
+    const net = builtinNetwork(model);
+    const ids = new Set(net.nodes.map((n) => n.id));
+    assert.equal(ids.size, net.nodes.length, `${model}: unique ids`);
+    for (const e of net.edges) assert.ok(ids.has(e.a) && ids.has(e.b), `${model}: edge ${e.a}-${e.b} joins real nodes`);
+    const groups = new Set(net.groups.map((g) => g.name));
+    for (const n of net.nodes) assert.ok(groups.has(partOf(n)), `${model}: node ${n.id} belongs to a described part`);
+    const pos = layoutNetwork(net);
+    for (const n of net.nodes) {
+      const p = pos.get(n.id);
+      assert.ok(p && p.every((v) => Number.isFinite(v) && Math.abs(v) < 8), `${model}: node ${n.id} placed in view`);
+    }
+    // no two units on top of each other
+    const pts = net.nodes.filter((n) => n.shape !== 'block').map((n) => pos.get(n.id)!);
+    for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) assert.ok(Math.hypot(pts[i][0] - pts[j][0], pts[i][1] - pts[j][1], pts[i][2] - pts[j][2]) > 0.3, `${model}: nodes overlap`);
+  }
+});
+
+test('the sandbox lab follows the subject: physics, chemistry, or neither', async () => {
+  const { labOf } = await import('../shared/lab');
+  assert.equal(labOf('Physics'), 'physics');
+  assert.equal(labOf('Projectile motion'), 'physics');
+  assert.equal(labOf('Organic chemistry'), 'chemistry');
+  assert.equal(labOf('Acids and bases'), 'chemistry');
+  for (const s of ['Neural networks', 'Large language models', 'World War II', 'Cell biology', 'Linear algebra', 'Databases', 'Psychology']) assert.equal(labOf(s), 'none', s);
+  assert.equal(labOf('Science', null, 'physics'), 'physics', 'the model\'s classification is used');
+  assert.equal(labOf('Biology', 'Enzyme reaction rates'), 'chemistry', 'a clearly chemical focus wins');
+  assert.equal(labOf('Machine learning', null, 'none'), 'none');
+});
