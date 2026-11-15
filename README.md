@@ -1,4 +1,4 @@
-# LessonLab
+# Syllabo
 
 Type any subject and get a full, explorable lesson:
 
