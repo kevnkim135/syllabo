@@ -20,6 +20,7 @@ const DEFAULT_COLOR: Partial<Record<BodyShape, string>> = {
   ball: '#f2f2f2', block: '#c98d4b', box: '#c98d4b', car: '#e0473c', cart: '#3f7fd9', plane: '#e8eaf0', rocket: '#eef0f4',
   person: '#4f8cff', planet: '#3d7fd6', sun: '#ffcf3f', moon: '#c9c9cf', satellite: '#c0c4cc', boat: '#d9a066', pulley: '#9aa0ad',
   spring: '#9aa0ad', ramp: '#b7a17e', charge: '#e0473c', crate: '#b07d45', truck: '#3f7fd9', ladder: '#c98d4b', wall: '#d9cbb8',
+  battery: '#2b2b33', resistor: '#d9c39a', bulb: '#fff6c8', switch: '#3a3d45', capacitor: '#4f8fe8',
   node: '#8b6bd6', chip: '#3a3d45', database: '#4f8fe8', document: '#f4f1ea',
   tank: '#9fb6c9', cylinder: '#c0c4cc', cone: '#e8a33d', tree: '#3f8f4e', house: '#e8d6b8', cannon: '#3a3d45', balloon: '#e0473c', table: '#a0703f',
 };
@@ -343,6 +344,133 @@ export function BodyShapeMesh({ shape, r = 0.45, color }: { shape?: BodyShape; r
             <torusGeometry args={[r * 1.002, r * 0.03, 6, 40]} />
             <Mat color="#2a2a30" />
           </mesh>
+        </group>
+      );
+    case 'battery':
+      // a cell lying along x: dark body, copper top band, + and − ends with terminals
+      return (
+        <group rotation={[0, 0, -Math.PI / 2]}>
+          <mesh>
+            <cylinderGeometry args={[r * 0.42, r * 0.42, r * 1.5, 32]} />
+            <Mat color={c} rough={0.35} metal={0.3} />
+          </mesh>
+          <mesh position={[0, r * 0.52, 0]}>
+            <cylinderGeometry args={[r * 0.43, r * 0.43, r * 0.46, 32]} />
+            <Mat color="#d98a3d" rough={0.3} metal={0.6} />
+          </mesh>
+          <mesh position={[0, r * 0.82, 0]}>
+            <cylinderGeometry args={[r * 0.14, r * 0.14, r * 0.14, 20]} />
+            <Mat color="#cfd3da" rough={0.2} metal={0.9} />
+          </mesh>
+          <mesh position={[0, -r * 0.77, 0]}>
+            <cylinderGeometry args={[r * 0.3, r * 0.3, r * 0.04, 24]} />
+            <Mat color="#cfd3da" rough={0.2} metal={0.9} />
+          </mesh>
+          {/* + and − marks on the body */}
+          <mesh position={[r * 0.43, r * 0.5, 0]}>
+            <boxGeometry args={[r * 0.02, r * 0.22, r * 0.06]} />
+            <Mat color="#ffffff" />
+          </mesh>
+          <mesh position={[r * 0.43, r * 0.5, 0]}>
+            <boxGeometry args={[r * 0.02, r * 0.06, r * 0.22]} />
+            <Mat color="#ffffff" />
+          </mesh>
+          <mesh position={[r * 0.43, -r * 0.45, 0]}>
+            <boxGeometry args={[r * 0.02, r * 0.06, r * 0.22]} />
+            <Mat color="#ffffff" />
+          </mesh>
+        </group>
+      );
+    case 'resistor':
+      // a beige body with the four colour bands, silver leads out both ends along x
+      return (
+        <group rotation={[0, 0, Math.PI / 2]}>
+          <mesh>
+            <capsuleGeometry args={[r * 0.24, r * 0.8, 8, 24]} />
+            <Mat color={c} rough={0.6} />
+          </mesh>
+          {['#8b4a2b', '#2b2b33', '#e0473c', '#d9b13d'].map((band, k) => (
+            <mesh key={k} position={[0, r * (0.33 - k * 0.2), 0]}>
+              <cylinderGeometry args={[r * 0.255, r * 0.255, r * 0.08, 24]} />
+              <Mat color={band} rough={0.5} />
+            </mesh>
+          ))}
+          <mesh>
+            <cylinderGeometry args={[r * 0.04, r * 0.04, r * 2.1, 10]} />
+            <Mat color="#c9ccd3" rough={0.25} metal={0.85} />
+          </mesh>
+        </group>
+      );
+    case 'bulb':
+      // a glowing glass bulb with its filament, on a threaded metal base
+      return (
+        <group>
+          <mesh position={[0, r * 0.25, 0]}>
+            <sphereGeometry args={[r * 0.6, 32, 24]} />
+            <meshPhysicalMaterial color={c} emissive="#ffd84a" emissiveIntensity={0.55} transparent opacity={0.6} roughness={0.05} transmission={0.3} depthWrite={false} />
+          </mesh>
+          <mesh position={[0, r * 0.25, 0]}>
+            <torusGeometry args={[r * 0.16, r * 0.025, 8, 24, Math.PI]} />
+            <Mat color="#ffb020" emissive="#ffb020" />
+          </mesh>
+          {[-1, 1].map((k) => (
+            <mesh key={k} position={[k * r * 0.16, -r * 0.08, 0]}>
+              <cylinderGeometry args={[r * 0.015, r * 0.015, r * 0.5, 6]} />
+              <Mat color="#8a8fa3" />
+            </mesh>
+          ))}
+          {[0, 1, 2].map((k) => (
+            <mesh key={k} position={[0, -r * (0.42 + k * 0.12), 0]}>
+              <cylinderGeometry args={[r * (0.27 - k * 0.015), r * (0.27 - k * 0.015), r * 0.1, 24]} />
+              <Mat color="#c9ccd3" rough={0.25} metal={0.85} />
+            </mesh>
+          ))}
+          <mesh position={[0, -r * 0.8, 0]}>
+            <sphereGeometry args={[r * 0.1, 12, 8]} />
+            <Mat color="#3a3d45" />
+          </mesh>
+        </group>
+      );
+    case 'switch':
+      // a knife switch on a base: open lever tilted up from the hinge on the left
+      return (
+        <group>
+          <mesh position={[0, -r * 0.18, 0]}>
+            <boxGeometry args={[r * 1.8, r * 0.14, r * 0.7]} />
+            <Mat color={c} rough={0.6} />
+          </mesh>
+          {[-1, 1].map((k) => (
+            <mesh key={k} position={[k * r * 0.7, -r * 0.02, 0]}>
+              <boxGeometry args={[r * 0.14, r * 0.22, r * 0.2]} />
+              <Mat color="#d98a3d" rough={0.3} metal={0.7} />
+            </mesh>
+          ))}
+          <mesh position={[-r * 0.7 + Math.cos(0.5) * r * 0.65, r * 0.08 + Math.sin(0.5) * r * 0.65, 0]} rotation={[0, 0, 0.5]}>
+            <boxGeometry args={[r * 1.3, r * 0.07, r * 0.12]} />
+            <Mat color="#d98a3d" rough={0.3} metal={0.7} />
+          </mesh>
+          <mesh position={[-r * 0.7 + Math.cos(0.5) * r * 1.3, r * 0.08 + Math.sin(0.5) * r * 1.3, 0]}>
+            <sphereGeometry args={[r * 0.1, 12, 8]} />
+            <Mat color="#2b2b33" />
+          </mesh>
+        </group>
+      );
+    case 'capacitor':
+      // two metal plates facing each other across a gap, leads out along x
+      return (
+        <group>
+          {[-1, 1].map((k) => (
+            <group key={k}>
+              <mesh position={[k * r * 0.16, 0, 0]}>
+                <boxGeometry args={[r * 0.08, r * 1.2, r * 0.9]} />
+                <Mat color={c} rough={0.3} metal={0.6} />
+              </mesh>
+              <mesh position={[k * r * 0.6, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+                <cylinderGeometry args={[r * 0.04, r * 0.04, r * 0.8, 10]} />
+                <Mat color="#c9ccd3" rough={0.25} metal={0.85} />
+              </mesh>
+            </group>
+          ))}
         </group>
       );
     case 'node':

@@ -98,3 +98,36 @@ test('the sandbox lab follows the subject: physics, chemistry, or neither', asyn
   assert.equal(labOf('Biology', 'Enzyme reaction rates'), 'chemistry', 'a clearly chemical focus wins');
   assert.equal(labOf('Machine learning', null, 'none'), 'none');
 });
+
+test('plots: curves must parse, junk is dropped, empty plots are rejected', () => {
+  const ok = validate('visual', {
+    kind: 'plot', title: 'Parabola', xRange: [-5, 5], yRange: [-5, 6],
+    curves: [{ expr: 'x^2 - 2*x - 3', label: 'y' }, { expr: 'x +* 2' }, { nope: 1 }],
+    points: [{ x: 1, y: -4, label: 'vertex' }, { x: 'a', y: 2 }],
+    segments: [{ from: [1, -5], to: [1, 6], dashed: true }, { from: [1], to: [2, 2] }],
+    areas: [{ points: [[0, 0], [1, 0]] }],
+    ticks: false,
+  });
+  assert.ok(ok && ok.kind === 'plot');
+  assert.equal(ok.curves?.length, 1, 'the unparseable curve is dropped');
+  assert.equal(ok.points?.length, 1);
+  assert.equal(ok.segments?.length, 1);
+  assert.equal(ok.areas?.length, 0, 'an area needs three corners');
+  assert.equal(ok.ticks, false);
+  assert.equal(validate('visual', { kind: 'plot', title: 'Empty', xRange: [0, 1], yRange: [0, 1] }), undefined);
+  assert.equal(validate('visual', { kind: 'plot', title: 'Bad range', xRange: [1, 0], yRange: [0, 1], points: [{ x: 0, y: 0 }] }), undefined);
+});
+
+test('circuit diagrams keep their wires and components', () => {
+  const d = validate('visual', {
+    kind: 'diagram', title: 'Series circuit', elements: [
+      { type: 'body', id: 'b', label: 'Battery 9 V', x: -3, y: 0, shape: 'battery', angle: 90 },
+      { type: 'body', id: 'r', label: 'R = 100 Ω', x: 0, y: 2, shape: 'resistor' },
+      { type: 'wire', points: [[-3, 0.5], [-3, 2], [3, 2], [3, -2], [-3, -2], [-3, -0.5]], current: true },
+      { type: 'wire', points: [[0, 0]] },
+    ],
+  });
+  assert.ok(d && d.kind === 'diagram');
+  assert.equal(d.elements.filter((e) => e.type === 'wire').length, 1, 'a one-point wire is dropped');
+  assert.deepEqual(d.elements.filter((e) => e.type === 'body').map((e) => (e as { shape?: string }).shape), ['battery', 'resistor']);
+});

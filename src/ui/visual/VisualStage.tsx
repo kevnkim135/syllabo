@@ -26,6 +26,8 @@ export function VisualStage({ spec, paused = false }: { spec: VisualSpec | null;
   const busy = box ? !!sandbox.busy : !!loading.visual;
   const orient = useRef<THREE.Group>(null);
   const net = spec?.kind === 'network';
+  // a board, or a balanced equation laid out left to right: looked at nearly straight on
+  const flat = spec?.kind === 'plot' || (spec?.kind === 'molecule' && Math.max(...spec.atoms.map((a) => a.x)) - Math.min(...spec.atoms.map((a) => a.x)) > 6);
   // In the sandbox, pointing and pinching only select, carry and rotate: no hold-zoom poses, no twirl.
   useEffect(() => {
     GESTURE.directManipulation = box && !paused;
@@ -60,9 +62,9 @@ export function VisualStage({ spec, paused = false }: { spec: VisualSpec | null;
             resetKey={box ? 'sandbox' : spec}
             active={!paused}
             orient={orient}
-            homeRadius={box ? 10.5 : net ? 12.5 : undefined}
-            homePhi={!box && net ? 1.3 : undefined}
-            homeTheta={!box && net ? 0.42 : undefined}
+            homeRadius={box ? 10.5 : net ? 12.5 : flat ? 11.5 : undefined}
+            homePhi={box ? undefined : net ? 1.3 : flat ? 1.42 : undefined}
+            homeTheta={box ? undefined : net ? 0.42 : flat ? 0.22 : undefined}
           />
         </Canvas>
 

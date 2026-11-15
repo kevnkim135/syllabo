@@ -37,6 +37,23 @@ export const DEFAULT_INFO: Record<string, string> = {
   Aorta: 'The body’s largest artery: carries blood from the left ventricle to the body.',
   'Pulmonary artery': 'Carries oxygen-poor blood from the right ventricle to the lungs.',
   'Vena cava': 'The large veins returning oxygen-poor blood to the right atrium.',
+  Protons: 'Positively charged particles in the nucleus. Their number (the atomic number) decides which element it is: carbon always has 6.',
+  Neutrons: 'Neutral particles in the nucleus. They add mass and hold the nucleus together; atoms of one element with different neutron counts are isotopes.',
+  'Inner shell (n = 1)': 'The first energy level, closest to the nucleus. It holds at most 2 electrons.',
+  'Outer shell (n = 2)': 'The second energy level holds up to 8 electrons. Carbon has 4 here, its valence electrons, so it forms 4 bonds.',
+  Electrons: 'Tiny negative particles moving around the nucleus in energy levels (shells). In a neutral atom there are as many electrons as protons.',
+  'Outer membrane': 'A smooth outer boundary that lets small molecules in and out.',
+  'Inner membrane': 'Folded into cristae; it holds the electron transport chain and ATP synthase, where most ATP is made.',
+  Cristae: 'Folds of the inner membrane. Folding packs in more surface, so more ATP can be made at once.',
+  Matrix: 'The fluid inside the inner membrane, where the Krebs cycle breaks down fuel and releases CO₂.',
+  'ATP synthase': 'Tiny rotating enzymes in the inner membrane that make ATP as protons flow back through them.',
+  'Mitochondrial DNA': 'A small circle of the mitochondrion’s own DNA, inherited from the mother.',
+  'Outer envelope': 'The chloroplast’s outer membrane.',
+  'Inner envelope': 'The inner membrane, which controls what moves between the stroma and the rest of the cell.',
+  Thylakoids: 'Flattened discs stacked into grana. Their membranes hold chlorophyll and run the light-dependent reactions, splitting water and releasing O₂.',
+  Stroma: 'The fluid around the thylakoids, where the Calvin cycle fixes CO₂ into sugar using ATP and NADPH.',
+  Lamellae: 'Membrane bridges that connect one granum to the next.',
+  'Starch grain': 'Stored sugar made by photosynthesis.',
 };
 
 function brain(): AnatomyPart[] {
@@ -144,8 +161,80 @@ function heart(): AnatomyPart[] {
   ];
 }
 
+/** A circle of points, for ring-shaped tubes (electron shells, circular DNA). */
+const ring = (r: number, tilt: number, n = 48): V[] =>
+  Array.from({ length: n + 1 }, (_, k) => {
+    const a = (k / n) * Math.PI * 2;
+    return [Math.cos(a) * r, Math.sin(a) * r * Math.cos(tilt), Math.sin(a) * r * Math.sin(tilt)];
+  });
+
+/** A Bohr model of carbon: 6 protons and 6 neutrons packed in the nucleus, 2 + 4 electrons on two shells. */
+function atom(): AnatomyPart[] {
+  const parts: AnatomyPart[] = [];
+  // nucleons on a small, tightly packed sphere (Fibonacci spiral), alternating protons and neutrons
+  const n = 12;
+  for (let k = 0; k < n; k++) {
+    const y = 1 - (2 * (k + 0.5)) / n;
+    const r = Math.sqrt(1 - y * y);
+    const a = k * 2.39996;
+    parts.push(P({ name: k % 2 ? 'Neutrons' : 'Protons', shape: 'sphere', surface: 'glossy', position: [Math.cos(a) * r * 0.42, y * 0.42, Math.sin(a) * r * 0.42], size: [0.42, 0.42, 0.42], color: k % 2 ? '#9aa0ad' : '#e0473c' }));
+  }
+  const shells: [string, number, number, number][] = [['Inner shell (n = 1)', 1.6, 0.35, 2], ['Outer shell (n = 2)', 3.0, 0.55, 4]];
+  for (const [name, r, tilt, electrons] of shells) {
+    parts.push(P({ name, shape: 'tube', position: [0, 0, 0], size: [0.03, 0, 0], color: '#8b6bd6', path: ring(r, tilt) }));
+    for (let e = 0; e < electrons; e++) {
+      const a = (e / electrons) * Math.PI * 2 + 0.4;
+      parts.push(P({ name: 'Electrons', shape: 'sphere', surface: 'glossy', position: [Math.cos(a) * r, Math.sin(a) * r * Math.cos(tilt), Math.sin(a) * r * Math.sin(tilt)], size: [0.26, 0.26, 0.26], color: '#3f7fd9' }));
+    }
+  }
+  return parts;
+}
+
+/** A mitochondrion cut open: smooth outer membrane, folded inner membrane (cristae), matrix, ATP synthase. */
+function mitochondrion(): AnatomyPart[] {
+  const parts: AnatomyPart[] = [
+    P({ name: 'Outer membrane', shape: 'capsule', surface: 'translucent', position: [0, 0, 0], size: [2.4, 2.6, 2.4], rotation: [0, 0, 90], color: '#f0a07a' }),
+    P({ name: 'Matrix', shape: 'capsule', surface: 'translucent', position: [0, 0, 0], size: [2.05, 2.35, 2.05], rotation: [0, 0, 90], color: '#f6d3a8' }),
+  ];
+  // cristae: folded shelves reaching in alternately from the top and the bottom of the inner membrane
+  for (let k = 0; k < 7; k++) {
+    const x = -2.4 + k * 0.8;
+    const top = k % 2 === 0;
+    const reach = 1.25 - Math.abs(x) * 0.12;
+    parts.push(P({ name: 'Cristae', shape: 'ellipsoid', surface: 'folded', position: [x, top ? 0.95 - reach / 2 : -0.95 + reach / 2, 0], size: [0.22, reach * 1.25, 1.55 - Math.abs(x) * 0.18], color: '#d8553a' }));
+    for (let j = 0; j < 3; j++) parts.push(P({ name: 'ATP synthase', shape: 'sphere', surface: 'glossy', position: [x + 0.15, (top ? 0.75 : -0.75) - (top ? 1 : -1) * j * 0.32, 0.35 - j * 0.12], size: [0.11, 0.11, 0.11], color: '#f2c94f' }));
+  }
+  parts.push(P({ name: 'Inner membrane', shape: 'capsule', surface: 'translucent', position: [0, 0, 0], size: [2.15, 2.45, 2.15], rotation: [0, 0, 90], color: '#e2683f' }));
+  parts.push(P({ name: 'Mitochondrial DNA', shape: 'tube', position: [0, 0, 0], size: [0.035, 0, 0], color: '#5b3a9e', path: ring(0.3, 1.1, 24).map(([x, y, z]) => [x + 2.0, y - 0.2, z + 0.3] as V) }));
+  return parts;
+}
+
+/** A chloroplast: double envelope, stacked thylakoids (grana) joined by lamellae, stroma, a starch grain. */
+function chloroplast(): AnatomyPart[] {
+  const parts: AnatomyPart[] = [
+    P({ name: 'Outer envelope', shape: 'ellipsoid', surface: 'translucent', position: [0, 0, 0], size: [6.2, 2.9, 3.6], color: '#7fc77a' }),
+    P({ name: 'Inner envelope', shape: 'ellipsoid', surface: 'translucent', position: [0, 0, 0], size: [5.8, 2.6, 3.3], color: '#a9dc8a' }),
+    P({ name: 'Stroma', shape: 'ellipsoid', surface: 'translucent', position: [0, 0, 0], size: [5.6, 2.45, 3.15], color: '#d6efbf' }),
+  ];
+  const grana: V[] = [[-1.9, -0.1, 0.3], [-0.7, 0.25, -0.5], [0.5, -0.15, 0.55], [1.7, 0.15, -0.3], [-0.2, -0.35, -1.0]];
+  grana.forEach(([x, y, z], g) => {
+    const h = 5 + (g % 2);
+    for (let k = 0; k < h; k++) parts.push(P({ name: 'Thylakoids', shape: 'cylinder', surface: 'glossy', position: [x, y - (h * 0.17) / 2 + k * 0.17, z], size: [0.78, 0.12, 0.78], color: '#2f8a3a' }));
+    if (g) parts.push(P({ name: 'Lamellae', shape: 'tube', position: [0, 0, 0], size: [0.05, 0, 0], color: '#4fa65a', path: [grana[g - 1], [(grana[g - 1][0] + x) / 2, (grana[g - 1][1] + y) / 2 + 0.1, (grana[g - 1][2] + z) / 2], [x, y, z]] }));
+  });
+  parts.push(P({ name: 'Starch grain', shape: 'ellipsoid', surface: 'smooth', position: [1.1, -0.55, 1.0], size: [0.7, 0.42, 0.5], color: '#f4f1ea' }));
+  for (let k = 0; k < 14; k++) parts.push(P({ name: 'Ribosomes', shape: 'sphere', position: [-2.4 + k * 0.37, Math.sin(k * 1.9) * 0.7, Math.cos(k * 1.3) * 1.1], size: [0.08, 0.08, 0.08], color: '#2b2b55' }));
+  return parts;
+}
+
 export function builtinParts(model: AnatomyModel): AnatomyPart[] {
   switch (model) {
+    case 'atom':
+      return atom();
+    case 'mitochondrion':
+      return mitochondrion();
+    case 'chloroplast':
+      return chloroplast();
     case 'brain':
       return brain();
     case 'neuron':

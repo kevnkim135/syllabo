@@ -66,6 +66,7 @@ export function Diagram({ spec }: { spec: DiagramSpec }) {
             </group>
           );
         }
+        if (el.type === 'wire') return <Wire key={i} points={el.points} current={!!el.current} label={el.label} />;
         if (el.type === 'path') {
           return (
             <group key={i}>
@@ -111,4 +112,53 @@ function Trail({ body, ground }: { body: BodyElement; ground?: number }) {
     });
   }, [body, ground]);
   return <Line points={points} color="#b9a0f0" lineWidth={1.5} transparent opacity={0.6} />;
+}
+
+/** A solid copper wire through its corners; with current on, charges stream along it from first point to last. */
+function Wire({ points, current, label }: { points: [number, number][]; current: boolean; label?: string }) {
+  const { geo, path, length } = useMemo(() => {
+    const v = points.map(([x, y]) => new THREE.Vector3(x, y, 0));
+    const p = new THREE.CurvePath<THREE.Vector3>();
+    for (let i = 1; i < v.length; i++) p.add(new THREE.LineCurve3(v[i - 1], v[i]));
+    return { geo: new THREE.TubeGeometry(p, Math.max(8, v.length * 16), 0.055, 10, false), path: p, length: p.getLength() };
+  }, [points]);
+  const beads = useRef<THREE.InstancedMesh>(null);
+  const n = current ? Math.max(3, Math.round(length / 0.7)) : 0;
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+  const clock = useRef(0);
+  useFrame((_, dt) => {
+    const m = beads.current;
+    if (!m || !n) return;
+    clock.current += Math.min(dt, 0.05);
+    for (let k = 0; k < n; k++) {
+      const t = ((k / n + (clock.current * 0.9) / length) % 1 + 1) % 1;
+      dummy.position.copy(path.getPointAt(t));
+      dummy.position.z += 0.06;
+      dummy.updateMatrix();
+      m.setMatrixAt(k, dummy.matrix);
+    }
+    m.instanceMatrix.needsUpdate = true;
+  });
+  const mid = points[Math.floor(points.length / 2)];
+  return (
+    <group>
+      <mesh geometry={geo}>
+        <meshStandardMaterial color="#c8743a" roughness={0.35} metalness={0.7} />
+      </mesh>
+      {/* rounded joints at the corners */}
+      {points.map(([x, y], k) => (
+        <mesh key={k} position={[x, y, 0]}>
+          <sphereGeometry args={[0.07, 12, 8]} />
+          <meshStandardMaterial color="#c8743a" roughness={0.35} metalness={0.7} />
+        </mesh>
+      ))}
+      {n > 0 && (
+        <instancedMesh ref={beads} args={[undefined, undefined, n]} key={n} frustumCulled={false}>
+          <sphereGeometry args={[0.075, 12, 8]} />
+          <meshBasicMaterial color="#ffd84a" toneMapped={false} />
+        </instancedMesh>
+      )}
+      {label && mid && <Label text={label} position={[mid[0], mid[1] + 0.35, 0]} height={0.26} />}
+    </group>
+  );
 }

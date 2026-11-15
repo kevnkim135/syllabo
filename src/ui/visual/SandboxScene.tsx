@@ -551,7 +551,7 @@ export function SandboxScene() {
           onPointerOut={() => (gl.domElement.style.cursor = '')}
         >
           <group name="shape">
-            {isBody(item) ? <BodyShapeMesh shape={item.body!.shape} r={item.body!.radius} color={item.body!.color ?? (item.body!.charge ? (item.body!.charge > 0 ? '#e0473c' : '#3f7fd9') : undefined)} /> : item.molecule && <Molecule spec={item.molecule} />}
+            {isBody(item) ? <BodyShapeMesh shape={item.body!.shape} r={item.body!.radius} color={item.body!.color ?? (item.body!.charge ? (item.body!.charge > 0 ? '#e0473c' : '#3f7fd9') : undefined)} /> : item.molecule && <Molecule spec={item.molecule} fit={false} />}
           </group>
           {isBody(item) && <arrowHelper name="vel" args={[new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 0), 1, 0xff9f1c, 0.25, 0.16]} />}
           <mesh name="halo" visible={false} renderOrder={5}>

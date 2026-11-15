@@ -72,6 +72,8 @@ export const BODY_SHAPES = [
   'pulley', 'spring', 'ramp', 'charge', 'ladder', 'wall', 'tank', 'cylinder', 'cone', 'tree', 'house', 'cannon', 'balloon', 'table',
   // concept objects, for sandboxes outside the physics / chemistry lab
   'node', 'chip', 'database', 'document',
+  // circuit components, drawn as the real parts and joined by "wire" elements
+  'battery', 'resistor', 'bulb', 'switch', 'capacitor',
 ] as const;
 export type BodyShape = (typeof BODY_SHAPES)[number];
 
@@ -94,6 +96,7 @@ export type BodyElement = {
 export type DiagramElement =
   | BodyElement
   | { type: 'path'; points: [number, number][]; label?: string } // a trajectory or outline, drawn dashed
+  | { type: 'wire'; points: [number, number][]; current?: boolean; label?: string } // a solid conductor through these corners; "current" shows charge flowing from first point to last
   | { type: 'vector'; from: string; label: string; dx: number; dy: number }
   | { type: 'link'; a: string; b: string; label?: string };
 
@@ -106,7 +109,7 @@ export interface DiagramSpec {
 }
 
 /** Hand-built, detailed models for the most common biology and psychology topics. */
-export const ANATOMY_MODELS = ['brain', 'neuron', 'cell', 'dna', 'heart'] as const;
+export const ANATOMY_MODELS = ['brain', 'neuron', 'cell', 'dna', 'heart', 'atom', 'mitochondrion', 'chloroplast'] as const;
 export type AnatomyModel = (typeof ANATOMY_MODELS)[number];
 export const PART_SHAPES = ['sphere', 'ellipsoid', 'blob', 'capsule', 'cylinder', 'cone', 'torus', 'box', 'tube'] as const;
 export type PartShape = (typeof PART_SHAPES)[number];
@@ -189,7 +192,42 @@ export interface NetworkSpec {
   focus?: string[]; // group (or node label) names to highlight first
 }
 
-export type VisualSpec = MoleculeSpec | SurfaceSpec | DiagramSpec | AnatomySpec | NetworkSpec;
+// ---- Plots: 2D graphs drawn the way a textbook does (axes, curves, points, bars, shapes) ----
+export interface PlotCurve {
+  expr: string; // y = f(x) in mathjs syntax, e.g. "x^2 - 2x - 3", "sin(x)", "exp(-x^2 / 2)"
+  label?: string;
+  color?: string;
+  dashed?: boolean;
+  from?: number; // draw only between these x values (default: the whole x range)
+  to?: number;
+}
+export interface PlotSegment {
+  from: [number, number];
+  to: [number, number];
+  label?: string;
+  color?: string;
+  dashed?: boolean;
+  arrow?: boolean; // arrowhead at "to"
+}
+export interface PlotSpec {
+  kind: 'plot';
+  title: string;
+  scene?: SceneKind;
+  xRange: [number, number];
+  yRange: [number, number];
+  xLabel?: string;
+  yLabel?: string;
+  ticks?: boolean; // numbers on the axes (default true); false for conceptual sketches (energy diagrams...)
+  axes?: boolean; // draw the axes and grid (default true); false for pure geometry figures
+  curves?: PlotCurve[];
+  points?: { x: number; y: number; label?: string; color?: string }[];
+  bars?: { x: number; height: number; width?: number; label?: string; color?: string }[];
+  segments?: PlotSegment[]; // tangent lines, sides, radii, arrows, dimension marks
+  areas?: { points: [number, number][]; color?: string; label?: string }[]; // filled polygons: triangles, shaded regions
+  labels?: { x: number; y: number; text: string }[];
+}
+
+export type VisualSpec = MoleculeSpec | SurfaceSpec | DiagramSpec | AnatomySpec | NetworkSpec | PlotSpec;
 
 export interface LessonMap {
   timeline: TimelineEvent[];

@@ -92,6 +92,43 @@ function visual(v: unknown): VisualSpec | undefined {
       groups: groups.length ? groups : undefined, nodes: nodes.length ? nodes : undefined, edges: edges.length ? edges : undefined, notes, focus,
     } as VisualSpec;
   }
+  if (v.kind === 'plot') {
+    const range = (r: unknown): [number, number] | undefined => (Array.isArray(r) && r.length === 2 && num(r[0]) && num(r[1]) && r[0] < r[1] ? [r[0], r[1]] : undefined);
+    const xRange = range(v.xRange);
+    const yRange = range(v.yRange);
+    if (!xRange || !yRange) return undefined;
+    const pt = (q: unknown): [number, number] | undefined => (Array.isArray(q) && q.length >= 2 && num(q[0]) && num(q[1]) ? [q[0], q[1]] : undefined);
+    const txt = (t: unknown, n = 40) => (str(t) || num(t) ? String(t).trim().slice(0, n) : undefined);
+    const color = (c: unknown) => (str(c) ? c : undefined);
+    const arr = (a: unknown) => (Array.isArray(a) ? a.filter(isObj) : []);
+    const curves = arr(v.curves).flatMap((c) => {
+      if (!str(c.expr)) return [];
+      try {
+        evaluate(c.expr, { x: (xRange[0] + xRange[1]) / 2 + 0.123 }); // must parse as a function of x (it may be undefined at one point)
+      } catch {
+        return [];
+      }
+      return [{ expr: c.expr.slice(0, 120), label: txt(c.label), color: color(c.color), dashed: c.dashed === true || undefined, from: num(c.from) ? c.from : undefined, to: num(c.to) ? c.to : undefined }];
+    }).slice(0, 6);
+    const points = arr(v.points).flatMap((p) => (num(p.x) && num(p.y) ? [{ x: p.x, y: p.y, label: txt(p.label), color: color(p.color) }] : [])).slice(0, 30);
+    const bars = arr(v.bars).flatMap((b) => (num(b.x) && num(b.height) ? [{ x: b.x, height: b.height, width: num(b.width) && b.width > 0 ? b.width : undefined, label: txt(b.label), color: color(b.color) }] : [])).slice(0, 30);
+    const segments = arr(v.segments).flatMap((g) => {
+      const from = pt(g.from);
+      const to = pt(g.to);
+      return from && to ? [{ from, to, label: txt(g.label), color: color(g.color), dashed: g.dashed === true || undefined, arrow: g.arrow === true || undefined }] : [];
+    }).slice(0, 30);
+    const areas = arr(v.areas).flatMap((a) => {
+      const ps = Array.isArray(a.points) ? a.points.map(pt).filter((q): q is [number, number] => !!q) : [];
+      return ps.length >= 3 ? [{ points: ps.slice(0, 200), color: color(a.color), label: txt(a.label) }] : [];
+    }).slice(0, 8);
+    const labels = arr(v.labels).flatMap((l) => (num(l.x) && num(l.y) && txt(l.text) ? [{ x: l.x, y: l.y, text: txt(l.text, 60)! }] : [])).slice(0, 20);
+    if (!curves.length && !points.length && !bars.length && !segments.length && !areas.length) return undefined;
+    return {
+      kind: 'plot', title: v.title, scene: scene(v.scene), xRange, yRange, xLabel: txt(v.xLabel), yLabel: txt(v.yLabel),
+      ticks: v.ticks === false ? false : undefined, axes: v.axes === false ? false : undefined,
+      curves, points, bars, segments, areas, labels,
+    } as VisualSpec;
+  }
   if (v.kind === 'diagram') {
     if (!Array.isArray(v.elements)) return undefined;
     const ids = new Set(v.elements.filter((e) => isObj(e) && e.type === 'body').map((e) => (e as { id: string }).id));
@@ -101,6 +138,7 @@ function visual(v: unknown): VisualSpec | undefined {
       if (e.type === 'body') return str(e.id) && str(e.label) && num(e.x) && num(e.y);
       if (e.type === 'path') return Array.isArray(e.points) && e.points.length >= 2 && e.points.every((p) => Array.isArray(p) && num(p[0]) && num(p[1]));
       if (e.type === 'vector') return typeof e.from === 'string' && ids.has(e.from) && num(e.dx) && num(e.dy);
+      if (e.type === 'wire') return Array.isArray(e.points) && e.points.length >= 2 && e.points.every((p) => Array.isArray(p) && num(p[0]) && num(p[1]));
       if (e.type === 'link') return typeof e.a === 'string' && typeof e.b === 'string' && ids.has(e.a) && ids.has(e.b);
       return false;
     });

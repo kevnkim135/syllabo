@@ -5,6 +5,7 @@ import type { VisualSpec } from '../../../shared/types';
 import { Diagram } from './Diagram';
 import { Anatomy } from './anatomy/Anatomy';
 import { Network } from './network/Network';
+import { Plot } from './plot/Plot';
 import { Molecule } from './Molecule';
 import { Surface } from './Surface';
 
@@ -33,6 +34,7 @@ export function ModelLayers({ spec }: { spec: VisualSpec }) {
           {l.spec.kind === 'diagram' && <Diagram spec={l.spec} />}
           {l.spec.kind === 'anatomy' && <Anatomy spec={l.spec} />}
           {l.spec.kind === 'network' && <Network spec={l.spec} />}
+          {l.spec.kind === 'plot' && <Plot spec={l.spec} />}
         </FadeLayer>
       ))}
     </>
