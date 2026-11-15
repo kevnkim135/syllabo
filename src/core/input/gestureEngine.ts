@@ -61,7 +61,7 @@ export const GESTURE = {
   exitFrames: 4, // frames without the pose before the mode ends
 
   // One Euro filters
-  imageFilter: { minCutoff: 1.2, beta: 8, dCutoff: 1 }, // normalized image coords
+  imageFilter: { minCutoff: 1.8, beta: 20, dCutoff: 1 }, // normalized image coords (light: pointers must not lag)
   worldFilter: { minCutoff: 1.5, beta: 40, dCutoff: 1 }, // metres
 
   // Zoom (hold an open hand to zoom in, hold a pinch to zoom out)
@@ -100,15 +100,21 @@ export const GESTURE = {
   fistHoldMs: 700,
 
   // Direct manipulation (point, tap, grab)
-  tapMs: 320, // a pinch released sooner than this is a tap; held longer it becomes a grab
+  tapMs: 200, // a pinch released sooner than this (without moving) is a tap; held longer, or moved, it is a grab
   tapMaxMove: 0.04, // screen fraction the pinch may drift and still count as a tap
   /** Set by the app while the sandbox is on screen: hold-to-zoom poses and twirl are off, so pointing and
    *  pinching only ever select, carry and rotate objects. */
   directManipulation: false,
-  grabDepthGain: 3, // scene units of depth per metre the hand moves toward / away from the camera
-  grabDepthEngage: 0.05, // metres the hand must move in depth before depth starts to follow (then it follows)
-  grabDepthSmoothing: 0.2, // 0..1 per frame; depth from a single camera is noisy, so it is heavily smoothed
-  grabDepthDeadZone: 0.012, // scene units per frame ignored, so depth only moves on purpose
+  grabDepthGain: 25, // scene units of depth per metre the hand moves toward / away from the camera (about as strong as side to side)
+  grabGain: 1.6, // side-to-side and up-down reach: the selection moves this much farther than the hand on screen
+  grabDepthEngage: 0.03, // metres the hand must move in depth before depth starts to follow (then it follows)
+  openHoldFrames: 8, // an open hand held this many frames (about 0.25 s) deselects what that hand picked (sandbox)
+  aimLookbackMs: 160, // at a pinch, aim where the fingertip pointed this long before (before the fingers began closing)
+  releaseFrames: 5, // a held object is let go only after the fingers are clearly apart this many frames in a row
+  releaseRatio: 0.6, // thumb-to-index gap (hand sizes) that counts as clearly apart; anything tighter keeps holding
+  lostHoldFrames: 45, // a hand that leaves the camera's view keeps holding for this many frames (about 1.5 s)
+  grabDepthSmoothing: 0.35, // 0..1 per frame; depth from a single camera is noisy, so it is smoothed
+  grabDepthDeadZone: 0.04, // scene units per frame ignored, so depth only moves on purpose
   scaleDeadZone: 0.01,
 
   flashMs: 700, // how long an event label ("next model", "home", ...) stays on screen
@@ -220,9 +226,14 @@ export function createGestureInterpreter(emit: (cmd: Command) => void = commands
   let homeFired = false;
   // direct manipulation
   // per hand: pinch-to-tap / pinch-and-hold-to-drag, and whether its pointer is showing
-  type Track = { down: number; start: { x: number; y: number }; last: { x: number; y: number }; z: number; z0: number; depthOn: boolean; dragging: boolean };
+  type Track = { down: number; start: { x: number; y: number }; last: { x: number; y: number }; z: number; z0: number; depthOn: boolean; dragging: boolean; miss: number };
   const tracks: Partial<Record<Hand, Track>> = {};
   const pointerShown: Partial<Record<Hand, boolean>> = {};
+  // per hand: recent fingertip aim, and the aim frozen at a pinch (so closing the fingers does not shift it)
+  const aimHist: Partial<Record<Hand, { t: number; x: number; y: number }[]>> = {};
+  const aimLock: Partial<Record<Hand, { x: number; y: number; base: { x: number; y: number } }>> = {};
+  const pressPending = new Set<Hand>();
+  const openFrames: Partial<Record<Hand, number>> = {};
   let scaleSpan: number | null = null;
   let flash: { label: GestureLabel; until: number } | null = null;
 
@@ -268,7 +279,7 @@ export function createGestureInterpreter(emit: (cmd: Command) => void = commands
       if (pose === 'point') return G.directManipulation ? 'none' : 'point'; // no twirl in the sandbox
       if (pose === 'gather') return G.directManipulation ? 'none' : 'gather'; // no hold-zoom in the sandbox
       if (pose === 'spread') return G.directManipulation ? 'none' : 'spread';
-      if (pose === 'open') return 'hand';
+      if (pose === 'open') return G.directManipulation ? 'none' : 'hand'; // no model swipes in the sandbox
       if (pose === 'pinch') return 'grab';
       return 'none';
     }
@@ -310,23 +321,35 @@ export function createGestureInterpreter(emit: (cmd: Command) => void = commands
    */
   function trackHands(seen: Seen[], now: number) {
     const present = new Set<Hand>();
+    const release = (side: Hand, t: Track) => {
+      if (t.dragging) emit({ type: 'grab', hand: side, phase: 'end', dx: 0, dy: 0, dz: 0 });
+      else if (now - t.down < G.tapMs + 250 && Math.hypot(t.last.x - t.start.x, t.last.y - t.start.y) < G.tapMaxMove) fire({ type: 'tap', hand: side }, 'grab', now);
+      delete tracks[side];
+    };
     for (const h of seen) {
       const side = h.side as Hand;
       present.add(side);
-      const pinch = mode !== 'rotate' && (h.pose === 'pinch' || (mode === 'scale' && h.shape.pinching && h.pose !== 'gather'));
+      const t = tracks[side];
+      // Starting a pinch needs a clean two-finger pinch. Once something is held, ANY thumb-to-index contact
+      // keeps holding it (the middle finger drifting close, or starting the rotate gesture, does not drop it).
+      const pinch = t?.dragging
+        ? h.shape.pinch < G.releaseRatio // holding: only clearly open fingers let go (motion blur and odd poses do not)
+        : (mode !== 'rotate' || G.directManipulation) &&
+          (h.pose === 'pinch' || (G.directManipulation && h.pose === 'gather') || (mode === 'scale' && h.shape.pinching && h.pose !== 'gather'));
       const sp = screenPoint(h);
       const z = h.depth * G.grabDepthGain; // the palm, so curling into a pinch is not depth (smoothed below)
-      const t = tracks[side];
-      if (mode === 'rotate' && t) {
-        // this pinch turned out to be the rotate clutch: it was never a tap or a drag
-        if (t.dragging) emit({ type: 'grab', hand: side, phase: 'end', dx: 0, dy: 0, dz: 0 });
-        delete tracks[side];
+      if (mode === 'rotate' && t && !t.dragging && !G.directManipulation) {
+        delete tracks[side]; // this pinch is the rotate clutch: never a tap (in the sandbox it grabs what it pinches)
       } else if (pinch && !t) {
-        tracks[side] = { down: now, start: sp, last: sp, z, z0: z, depthOn: false, dragging: false };
+        tracks[side] = { down: now, start: sp, last: sp, z, z0: z, depthOn: false, dragging: false, miss: 0 };
+        pressPending.add(side); // emitted after this frame's pointer, so the press uses the locked aim
       } else if (pinch && t) {
-        if (!t.dragging && now - t.down >= G.tapMs) {
+        t.miss = 0;
+        const moved = Math.hypot(sp.x - t.start.x, sp.y - t.start.y) > G.tapMaxMove;
+        if (!t.dragging && (now - t.down >= G.tapMs || moved)) {
           t.dragging = true;
           emit({ type: 'grab', hand: side, phase: 'start', dx: 0, dy: 0, dz: 0 });
+          t.last = t.start; // so the movement that started the drag is not lost
         }
         const zs = t.z + (z - t.z) * G.grabDepthSmoothing;
         if (t.dragging) {
@@ -336,30 +359,53 @@ export function createGestureInterpreter(emit: (cmd: Command) => void = commands
           if (!t.depthOn && Math.abs(zs - t.z0) > G.grabDepthEngage * G.grabDepthGain) t.depthOn = true;
           let dz = t.depthOn ? zs - t.z : 0;
           if (Math.abs(dz) < G.grabDepthDeadZone) dz = 0;
-          if (Math.abs(dx) + Math.abs(dy) > 0.0015 || dz) emit({ type: 'grab', hand: side, phase: 'move', dx, dy, dz });
+          if (Math.abs(dx) + Math.abs(dy) > 0.0012 || dz) emit({ type: 'grab', hand: side, phase: 'move', dx: dx * G.grabGain, dy: dy * G.grabGain, dz });
         }
         t.last = sp;
         t.z = zs;
       } else if (!pinch && t) {
-        if (t.dragging) emit({ type: 'grab', hand: side, phase: 'end', dx: 0, dy: 0, dz: 0 });
-        else if (now - t.down < G.tapMs + 150 && Math.hypot(t.last.x - t.start.x, t.last.y - t.start.y) < G.tapMaxMove) fire({ type: 'tap', hand: side }, 'grab', now);
-        delete tracks[side];
+        // a flicker is not a release: let go only after several frames in a row with the fingers apart
+        if (++t.miss >= (t.dragging ? G.releaseFrames : 2)) release(side, t);
       }
-      // pointer: this hand pointing or two-finger pinching
-      const pointing = h.pose === 'point' || h.pose === 'pinch';
+      // pointer: the index fingertip while pointing; at a pinch it stays where the finger aimed just before the
+      // fingers began to close, and while dragging it moves by the hand's motion from there (no jump either way)
+      const tip = { x: 1 - h.image[8].x, y: h.image[8].y };
+      const hist = (aimHist[side] ??= []);
+      const held = tracks[side];
+      let aim = tip;
+      if (held) {
+        if (!aimLock[side]) {
+          const before = hist.find((e) => now - e.t <= G.aimLookbackMs + 40 && now - e.t >= G.aimLookbackMs - 40) ?? hist[0] ?? { x: tip.x, y: tip.y };
+          aimLock[side] = { x: before.x, y: before.y, base: sp };
+        }
+        const lock = aimLock[side]!;
+        aim = held.dragging ? { x: lock.x + (sp.x - lock.base.x), y: lock.y + (sp.y - lock.base.y) } : lock;
+      } else {
+        delete aimLock[side];
+        hist.push({ t: now, x: tip.x, y: tip.y });
+        while (hist.length && now - hist[0].t > 400) hist.shift();
+      }
+      const pointing = h.pose === 'point' || h.pose === 'pinch' || !!held;
       if (pointing) {
-        emit({ type: 'pointer', hand: side, x: sp.x, y: sp.y, visible: true });
+        emit({ type: 'pointer', hand: side, x: aim.x, y: aim.y, visible: true });
         pointerShown[side] = true;
       } else if (pointerShown[side]) {
         emit({ type: 'pointer', hand: side, x: 0, y: 0, visible: false });
         pointerShown[side] = false;
       }
+      if (pressPending.delete(side)) emit({ type: 'press', hand: side });
+      // an open hand, held, in the sandbox: once per opening
+      if (G.directManipulation && h.pose === 'open' && !tracks[side]) {
+        openFrames[side] = (openFrames[side] ?? 0) + 1;
+        if (openFrames[side] === G.openHoldFrames) emit({ type: 'openHand', hand: side });
+      } else openFrames[side] = 0;
     }
     for (const side of ['left', 'right'] as Hand[]) {
       if (present.has(side)) continue;
       const t = tracks[side];
-      if (t?.dragging) emit({ type: 'grab', hand: side, phase: 'end', dx: 0, dy: 0, dz: 0 });
-      delete tracks[side];
+      // the tracker losing the hand for a moment is not a release either
+      if (t && ++t.miss < (t.dragging ? G.lostHoldFrames : 4)) continue;
+      if (t) release(side, { ...t, down: -1e9 }); // a lost hand never counts as a tap
       if (pointerShown[side]) emit({ type: 'pointer', hand: side, x: 0, y: 0, visible: false }), (pointerShown[side] = false);
     }
   }

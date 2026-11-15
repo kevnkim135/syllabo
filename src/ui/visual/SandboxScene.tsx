@@ -11,7 +11,7 @@ import { BodyShapeMesh } from './shapes';
 const ANGSTROM = 1.6; // Molecule.tsx scale
 const EASE = 9; // 1/s, how fast molecules glide to where the store says they are
 const FLOOR = -2.6; // the lab bench (Environment.tsx)
-const WALL = 9; // the space is a box this wide
+const WALL = 22; // bodies bounce off invisible walls this far from the centre
 const G_DOWN = 6; // gravity, scene units / s^2
 const G_ORBIT = 0.05; // between celestial bodies: a = G m / r^2
 const K_CHARGE = 6; // between charges: a = K q1 q2 / (m r^2)
@@ -37,9 +37,41 @@ export function radiusOf(item: SandboxItem) {
   const a = item.molecule?.atoms ?? [];
   if (!a.length) return 0.6;
   const c = a.reduce((s, p) => [s[0] + p.x / a.length, s[1] + p.y / a.length, s[2] + p.z / a.length], [0, 0, 0]);
-  return Math.max(0.6, ...a.map((p) => Math.hypot(p.x - c[0], p.y - c[1], p.z - c[2]) * ANGSTROM + 0.55)) * item.scale;
+  return Math.max(0.5, ...a.map((p) => Math.hypot(p.x - c[0], p.y - c[1], p.z - c[2]) * ANGSTROM + 0.42)) * item.scale; // farthest atom plus about one atom radius
 }
 const isBody = (i: SandboxItem) => i.kind === 'body' && !!i.body;
+
+/**
+ * A crisp rim glow: bright where the surface turns away from the camera (the object's silhouette), clear in
+ * the middle, so a selected object reads as outlined rather than wrapped in fog.
+ */
+function rimMaterial() {
+  return new THREE.ShaderMaterial({
+    uniforms: { color: { value: new THREE.Color('#8b6bd6') }, strength: { value: 1 }, power: { value: 2.6 } },
+    vertexShader: `
+      varying vec3 vNormal;
+      varying vec3 vView;
+      void main() {
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vNormal = normalize(normalMatrix * normal);
+        vView = normalize(-mv.xyz);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform vec3 color;
+      uniform float strength;
+      uniform float power;
+      varying vec3 vNormal;
+      varying vec3 vView;
+      void main() {
+        float rim = pow(1.0 - abs(dot(normalize(vNormal), normalize(vView))), power);
+        gl_FragColor = vec4(color, clamp(rim * strength, 0.0, 1.0));
+      }`,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+}
 
 /**
  * The sandbox: molecules and physical bodies in one shared space.
@@ -69,7 +101,12 @@ export function SandboxScene() {
   const contactRef = useRef<string[] | null>(null);
   const lastEvent = useRef(0);
   const lastSync = useRef(0);
+  const pressed = useRef(new Map<Hand, { id: string | null; wasSelected: boolean; t: number }>());
+  const lastTap = useRef(new Map<Hand, number>());
+  const owned = useRef(new Map<Hand, Set<string>>()); // what each hand picked or carried, so an open hand can let go of just its own
+  const opened = useRef(new Map<Hand, number>()); // when each hand last opened
   const born = useRef(new Set<string>()); // objects that have already bloomed in
+  const rims = useRef(new Map<string, THREE.ShaderMaterial>()); // one glow material per object (uniforms differ)
   if (import.meta.env.DEV) (window as unknown as { __sandboxGroups?: unknown }).__sandboxGroups = groups; // inspection in dev only
   const spin = useRef<{ ids: string[]; until: number } | null>(null);
   const liveRot = useRef(new Map<string, THREE.Quaternion>()); // orientations while a rotate gesture is running
@@ -87,7 +124,7 @@ export function SandboxScene() {
     const list = items.current;
     const ids = new Set(list.map((i) => i.id));
     for (const id of sims.current.keys()) if (!ids.has(id)) sims.current.delete(id); // removed or reacted away
-    for (const id of groups.current.keys()) if (!ids.has(id)) groups.current.delete(id), born.current.delete(id);
+    for (const id of groups.current.keys()) if (!ids.has(id)) groups.current.delete(id), born.current.delete(id), rims.current.get(id)?.dispose(), rims.current.delete(id);
     for (const it of list) {
       if (!isBody(it)) continue;
       const s = sims.current.get(it.id);
@@ -155,21 +192,54 @@ export function SandboxScene() {
         if (cmd.type === 'pointer') {
           if (cmd.visible) pointers.current.set(cmd.hand, new THREE.Vector2(cmd.x * 2 - 1, -(cmd.y * 2 - 1)));
           else pointers.current.delete(cmd.hand), hover.current.delete(cmd.hand);
+        } else if (cmd.type === 'press') {
+          // the instant the fingers close: select what this hand points at (adds to the group)
+          const id = hover.current.get(cmd.hand) ?? null;
+          pressed.current.set(cmd.hand, { id, wasSelected: !!id && selected.current.includes(id), t: performance.now() });
+          if (id && !selected.current.includes(id)) {
+            selected.current = [...selected.current, id];
+            lesson.sandboxSelect([id], 'add');
+          }
+          if (id) (owned.current.get(cmd.hand) ?? owned.current.set(cmd.hand, new Set()).get(cmd.hand)!).add(id);
+        } else if (cmd.type === 'openHand') {
+          // an open hand lets go of everything it picked; both hands open (within half a second) clears it all
+          const now = performance.now();
+          opened.current.set(cmd.hand, now);
+          const other = opened.current.get(cmd.hand === 'left' ? 'right' : 'left') ?? -1e9;
+          if (now - other < 500) {
+            owned.current.clear();
+            selected.current = [];
+            lesson.sandboxSelect([], 'set');
+            return;
+          }
+          const mine = [...(owned.current.get(cmd.hand) ?? [])].filter((x) => selected.current.includes(x));
+          owned.current.delete(cmd.hand);
+          if (mine.length) {
+            selected.current = selected.current.filter((x) => !mine.includes(x));
+            lesson.sandboxSelect(mine, 'remove');
+          }
         } else if (cmd.type === 'tap') {
-          const id = hover.current.get(cmd.hand);
+          const p = pressed.current.get(cmd.hand);
+          const id = p?.id ?? hover.current.get(cmd.hand) ?? null;
           const contact = contactRef.current;
+          const now = performance.now();
+          if (now - (lastTap.current.get(cmd.hand) ?? 0) < 350) return; // one click per pinch, even if it flickers
+          lastTap.current.set(cmd.hand, now);
           if (id && contact?.includes(id)) lesson.sandboxReact(); // tapping touching molecules confirms the reaction
-          else if (id) lesson.sandboxSelect([id], 'toggle'); // each tap adds to (or removes from) the group
-          else lesson.sandboxSelect([], 'set');
+          else if (id && p?.wasSelected) lesson.sandboxSelect([id], 'toggle'); // click a selected object again to deselect
+          else if (!id) lesson.sandboxSelect([], 'set'); // click empty space to clear
         } else if (cmd.type === 'grab') {
           if (cmd.phase === 'start') {
             const id = hover.current.get(cmd.hand) ?? null;
             const otherDragging = [...drags.current.keys()].some((k) => k !== cmd.hand);
             let ids: string[] = [];
-            if (id && selected.current.includes(id) && !otherDragging) ids = selected.current; // carry the whole group
+            const twoHands = pointers.current.size > 1;
+            if (id && selected.current.includes(id) && !otherDragging && !twoHands) ids = selected.current; // one hand: carry the whole group
             else if (id) ids = [id], lesson.sandboxSelect([id], 'add');
-            else if (!otherDragging) ids = selected.current;
+            else if (!otherDragging && !twoHands) ids = selected.current;
             startDrag(cmd.hand, ids);
+            const mine = owned.current.get(cmd.hand) ?? owned.current.set(cmd.hand, new Set()).get(cmd.hand)!;
+            ids.forEach((x) => mine.add(x));
           } else if (cmd.phase === 'move') {
             const d = drags.current.get(cmd.hand);
             if (!d) return;
@@ -263,7 +333,7 @@ export function SandboxScene() {
           s.vel[ax] *= -bounce;
         }
       }
-      if (s.pos.y > 12) (s.pos.y = 12), (s.vel.y = -Math.abs(s.vel.y) * BOUNCE);
+      if (s.pos.y > 30) (s.pos.y = 30), (s.vel.y = -Math.abs(s.vel.y) * BOUNCE);
     }
     // collisions between bodies: momentum is conserved; some kinetic energy is lost
     for (let a = 0; a < bodies.length; a++) {
@@ -383,9 +453,11 @@ export function SandboxScene() {
       const on = selected.current.includes(it.id);
       const touch = !!contactRef.current?.includes(it.id);
       halo.visible = on || hot || touch;
-      const m = halo.material as THREE.MeshBasicMaterial;
-      m.color.set(touch ? '#ff9f1c' : '#8b6bd6');
-      m.opacity = touch ? 0.22 : on ? 0.16 : 0.08;
+      const m = halo.material as THREE.ShaderMaterial;
+      m.uniforms.color.value.set(touch ? '#ff9f1c' : on ? '#9b7bff' : '#b9a0f0');
+      // selected: a strong, sharp outline with a gentle breathing pulse; pointed at: a fainter, softer one
+      m.uniforms.strength.value = touch ? 1.6 : on ? 1.35 + 0.25 * Math.sin(tNow / 260) : 0.7;
+      m.uniforms.power.value = on || touch ? 3.2 : 2.2;
     }
 
     // ---- report moving bodies to the store now and then, so saves keep them where they are ----
@@ -458,9 +530,9 @@ export function SandboxScene() {
             {isBody(item) ? <BodyShapeMesh shape={item.body!.shape} r={item.body!.radius} color={item.body!.color ?? (item.body!.charge ? (item.body!.charge > 0 ? '#e0473c' : '#3f7fd9') : undefined)} /> : item.molecule && <Molecule spec={item.molecule} />}
           </group>
           {isBody(item) && <arrowHelper name="vel" args={[new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 0), 1, 0xff9f1c, 0.25, 0.16]} />}
-          <mesh name="halo" visible={false}>
-            <sphereGeometry args={[radiusOf({ ...item, scale: 1 }) + 0.15, 32, 20]} />
-            <meshBasicMaterial color="#8b6bd6" transparent opacity={0.1} depthWrite={false} />
+          <mesh name="halo" visible={false} renderOrder={5}>
+            <sphereGeometry args={[radiusOf({ ...item, scale: 1 }) + 0.06, 48, 32]} />
+            <primitive object={rims.current.get(item.id) ?? rims.current.set(item.id, rimMaterial()).get(item.id)!} attach="material" />
           </mesh>
           <Label
             text={isBody(item) && item.body!.charge ? `${item.name} (${item.body!.charge > 0 ? '+' : '−'})` : item.name}

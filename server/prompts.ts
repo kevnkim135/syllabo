@@ -30,7 +30,14 @@ Write every mathematical expression in LaTeX between $...$ (inline) or $$...$$ (
 2. Pure multivariable calculus with no real-world story (functions of two variables) -> surface z = f(x, y), expr in mathjs syntax. If the topic is an applied word problem (rates, optimization, motion), use a diagram scene of the real objects instead:
 {"kind": "surface", "title": "...", "expr": "sin(x) * cos(y)", "xRange": [-3, 3], "yRange": [-3, 3]}
 
-3. Physics or anything else -> a labeled diagram drawn like a textbook figure, coordinates within -5..5 (x right, y up):
+3. Biology, anatomy, psychology / neuroscience, medicine, earth science (anything with a real physical structure) -> a realistic, colored 3D model, NEVER abstract circles and lines:
+{"kind": "anatomy", "title": "...", "model": "brain", "focus": ["Frontal lobe"], "notes": {"Frontal lobe": "why this part matters for the lesson"}}
+- "model" is a detailed built-in: "brain" (parts: Frontal lobe, Parietal lobe, Temporal lobe, Occipital lobe, Cerebellum, Brainstem), "neuron" (Cell body, Nucleus, Dendrites, Axon, Myelin sheath, Axon terminals), "cell" (Cell membrane, Nucleus, Nucleolus, Mitochondria, Endoplasmic reticulum, Golgi apparatus, Lysosomes, Ribosomes), "dna" (Sugar-phosphate backbone, Adenine, Thymine, Guanine, Cytosine), "heart" (Left ventricle, Right ventricle, Left atrium, Right atrium, Aorta, Pulmonary artery, Vena cava). Use one whenever it fits, with "focus" and "notes" tailored to the topic.
+- Otherwise compose the structure from parts with real colors and organic shapes (e.g. a plant cell, a lung, a leaf, an eye, a volcano, the layers of the Earth):
+{"kind": "anatomy", "title": "...", "parts": [{"name": "Chloroplast", "shape": "ellipsoid" | "blob" | "sphere" | "capsule" | "cylinder" | "cone" | "torus" | "box" | "tube", "position": [x, y, z], "size": [sx, sy, sz], "rotation": [0, 0, 0], "color": "#3f8f4e", "surface": "smooth" | "folded" | "bumpy" | "glossy" | "translucent", "info": "one sentence on what it does"}]}
+  6-20 parts within -4..4; "tube" parts also take "path": [[x,y,z], ...] (vessels, nerves, roots); put inner parts inside a "translucent" outer part.
+
+4. Physics or anything else -> a labeled diagram drawn like a textbook figure, coordinates within -5..5 (x right, y up):
 {"kind": "diagram", "title": "...", "scene": "ground", "ground": -2, "elements": [
   {"type": "body", "id": "car", "label": "Car (1200 kg)", "x": -4, "y": -1.6, "shape": "car", "motion": {"vx": 2, "vy": 0, "ax": 0.5, "ay": 0, "duration": 3}},
   {"type": "vector", "from": "car", "label": "Friction", "dx": -1.2, "dy": 0},

@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { VisualSpec } from '../../../shared/types';
 import { Diagram } from './Diagram';
+import { Anatomy } from './anatomy/Anatomy';
 import { Molecule } from './Molecule';
 import { Surface } from './Surface';
 
@@ -29,6 +30,7 @@ export function ModelLayers({ spec }: { spec: VisualSpec }) {
           {l.spec.kind === 'molecule' && <Molecule spec={l.spec} />}
           {l.spec.kind === 'surface' && <Surface spec={l.spec} />}
           {l.spec.kind === 'diagram' && <Diagram spec={l.spec} />}
+          {l.spec.kind === 'anatomy' && <Anatomy spec={l.spec} />}
         </FadeLayer>
       ))}
     </>

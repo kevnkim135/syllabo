@@ -460,10 +460,14 @@ export const lesson = {
     withActive((s) => update(s.id, { sandbox: { ...s.sandbox, event: text } }));
   },
   /** Select sandbox items: replace the selection, toggle items in it, or add to it. */
-  sandboxSelect(ids: string[], how: 'set' | 'toggle' | 'add' = 'set') {
+  sandboxSelect(ids: string[], how: 'set' | 'toggle' | 'add' | 'remove' = 'set') {
     withActive((s) => {
       const cur = s.sandbox.selected;
-      const selected = how === 'set' ? ids : how === 'add' ? [...new Set([...cur, ...ids])] : cur.filter((i) => !ids.includes(i)).concat(ids.filter((i) => !cur.includes(i)));
+      const selected =
+        how === 'set' ? ids
+        : how === 'add' ? [...new Set([...cur, ...ids])]
+        : how === 'remove' ? cur.filter((i) => !ids.includes(i))
+        : cur.filter((i) => !ids.includes(i)).concat(ids.filter((i) => !cur.includes(i)));
       update(s.id, { sandbox: { ...s.sandbox, selected } });
     });
   },
@@ -606,7 +610,7 @@ function refillExamples(id: string, showFirst = false) {
 export const isCelestial = (shape?: string) => shape === 'sun' || shape === 'planet' || shape === 'moon' || shape === 'satellite';
 const centroid = (ps: [number, number, number][]): [number, number, number] =>
   ps.length ? [0, 1, 2].map((k) => ps.reduce((a, p) => a + p[k], 0) / ps.length) as [number, number, number] : [0, 0, 0];
-const clampPos = (p: [number, number, number]): [number, number, number] => p.map((v) => Math.max(-9, Math.min(9, v))) as [number, number, number];
+const clampPos = (p: [number, number, number]): [number, number, number] => p.map((v) => Math.max(-40, Math.min(40, v))) as [number, number, number]; // generous: carried things can go far
 /** "Water (H2O)" or "Methane (CH4): tetrahedral" -> "Water" / "Methane"; falls back to what was asked for. */
 const tidyName = (title: string, asked: string) => {
   const name = title.split(/[(:,]/)[0].trim();

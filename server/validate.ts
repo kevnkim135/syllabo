@@ -1,6 +1,6 @@
 // Runtime validation of model output against shared/types.ts. Returns a cleaned value or undefined.
 import { evaluate } from 'mathjs';
-import { BODY_SHAPES, LESSON_KINDS, SANDBOX_SETTINGS, SCENES, type SandboxItemSpec, type SandboxSetting, type BodyShape, type MoleculeSpec, type ReactionResult, type SceneKind, type IntentResult, type LessonKind, type LessonMap, type Problem, type ScopeInfo, type TopicDetail, type TopicNode, type VisualSpec, type VoiceIntent } from '../shared/types';
+import { ANATOMY_MODELS, BODY_SHAPES, LESSON_KINDS, PART_SHAPES, PART_SURFACES, SANDBOX_SETTINGS, SCENES, type AnatomyModel, type AnatomyPart, type PartShape, type PartSurface, type SandboxItemSpec, type SandboxSetting, type BodyShape, type MoleculeSpec, type ReactionResult, type SceneKind, type IntentResult, type LessonKind, type LessonMap, type Problem, type ScopeInfo, type TopicDetail, type TopicNode, type VisualSpec, type VoiceIntent } from '../shared/types';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
@@ -38,6 +38,27 @@ function visual(v: unknown): VisualSpec | undefined {
       return undefined;
     }
     return { ...v, scene: scene(v.scene) } as unknown as VisualSpec;
+  }
+  if (v.kind === 'anatomy') {
+    const vec = (x: unknown, lo = -10, hi = 10): [number, number, number] | undefined =>
+      Array.isArray(x) && x.length === 3 && x.every((n) => num(n)) ? (x.map((n) => Math.max(lo, Math.min(hi, n as number))) as [number, number, number]) : undefined;
+    const model = ANATOMY_MODELS.includes(v.model as AnatomyModel) ? (v.model as AnatomyModel) : undefined;
+    const parts = (Array.isArray(v.parts) ? v.parts : []).flatMap((p): AnatomyPart[] => {
+      if (!isObj(p) || !str(p.name) || !PART_SHAPES.includes(p.shape as PartShape)) return [];
+      const position = vec(p.position) ?? [0, 0, 0];
+      const size = vec(p.size, 0.02, 12) ?? [1, 1, 1];
+      const path = Array.isArray(p.path) ? p.path.map((q) => vec(q)).filter((q): q is [number, number, number] => !!q) : undefined;
+      if (p.shape === 'tube' && (!path || path.length < 2)) return [];
+      return [{
+        name: p.name.trim().slice(0, 60), shape: p.shape as PartShape, position, size, rotation: vec(p.rotation, -360, 360),
+        color: str(p.color) ? p.color : '#c98d8d', surface: PART_SURFACES.includes(p.surface as PartSurface) ? (p.surface as PartSurface) : undefined,
+        path, info: str(p.info) ? p.info.trim().slice(0, 300) : undefined,
+      }];
+    });
+    if (!model && !parts.length) return undefined;
+    const notes = isObj(v.notes) ? Object.fromEntries(Object.entries(v.notes).filter(([, t]) => str(t)).map(([k, t]) => [k, String(t).slice(0, 300)])) : undefined;
+    const focus = Array.isArray(v.focus) ? v.focus.filter(str).slice(0, 6) : undefined;
+    return { kind: 'anatomy', title: v.title, scene: scene(v.scene), model, parts: parts.length ? parts.slice(0, 40) : undefined, notes, focus } as VisualSpec;
   }
   if (v.kind === 'diagram') {
     if (!Array.isArray(v.elements)) return undefined;

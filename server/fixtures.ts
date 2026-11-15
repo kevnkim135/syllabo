@@ -101,7 +101,16 @@ const VISUALS = {
   diagram: [[/atwood|pulley/, forces], [/incline|ramp|friction/, incline], [/projectile|launch|throw/, projectile]],
 } satisfies Record<string, [RegExp, VisualSpec][]>;
 
+const brain: VisualSpec = { kind: 'anatomy', title: 'The human brain: lobes and what they do', model: 'brain', focus: ['Frontal lobe'] };
+const cell: VisualSpec = { kind: 'anatomy', title: 'An animal cell and its organelles', model: 'cell', focus: ['Nucleus', 'Mitochondria'] };
+const neuron: VisualSpec = { kind: 'anatomy', title: 'A neuron: how signals travel', model: 'neuron' };
+const dna: VisualSpec = { kind: 'anatomy', title: 'DNA: the double helix and its base pairs', model: 'dna' };
+const heart: VisualSpec = { kind: 'anatomy', title: 'The heart: four chambers and great vessels', model: 'heart' };
+const ANATOMY: [RegExp, VisualSpec][] = [[/neuron|nerve|synap/, neuron], [/brain|psych|neuro|cognit|memory|emotion/, brain], [/cell|organelle|mitochond/, cell], [/dna|gene|heredit|helix/, dna], [/heart|cardio|circulat|blood/, heart]];
+
 function pickVisual(subject: string, request = '', variant = 0): VisualSpec {
+  const anatomy = ANATOMY.find(([re]) => re.test(`${request} ${subject}`.toLowerCase()));
+  if (anatomy) return variant ? ANATOMY[(ANATOMY.indexOf(anatomy) + variant) % ANATOMY.length][1] : anatomy[1];
   const r = request.toLowerCase();
   const byRequest = Object.values(VISUALS).flat().find(([re]) => r && re.test(r));
   if (byRequest) return byRequest[1];
@@ -214,8 +223,9 @@ export function reactFixture(req: ReactRequest): ReactionResult {
 /** Mock "new example" batch: the subject's group, minus what was already shown (cycling when all were seen). */
 export function examplesFixture(subject: string, avoid: string[]): VisualSpec[] {
   const s = subject.toLowerCase();
+  const anat = /brain|psych|neuro|bio|cell|gene|dna|heart|anatom|medic/.test(s);
   const group = /chem|molec|bond|atom/.test(s) ? VISUALS.molecule : /phys|force|motion|mechanic|diagram/.test(s) ? VISUALS.diagram : VISUALS.surface;
-  const all = group.map(([, v]) => v);
+  const all = anat ? [brain, neuron, cell, dna, heart] : group.map(([, v]) => v);
   const fresh = all.filter((v) => !avoid.includes(v.title));
   return fresh.length ? fresh : all;
 }

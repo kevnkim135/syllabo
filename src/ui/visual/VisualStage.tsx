@@ -12,6 +12,7 @@ import { Environment } from './Environment';
 import { ModelGallery } from './ModelGallery';
 import { ModelLayers } from './ModelLayers';
 import { SandboxPanel } from './SandboxPanel';
+import { AnatomyPanel } from './anatomy/AnatomyPanel';
 import { SandboxScene } from './SandboxScene';
 
 /** The 3D stage. It stays mounted for the whole lesson; `paused` stops rendering and input while hidden. */
@@ -42,13 +43,13 @@ export function VisualStage({ spec, paused = false }: { spec: VisualSpec | null;
           <ambientLight intensity={0.85} />
           <directionalLight position={[5, 10, 5]} intensity={1.3} />
           <directionalLight position={[-6, -2, -4]} intensity={0.35} />
-          <Environment scene={scene} ground={!box && spec?.kind === 'diagram' ? (spec.ground ?? -2.6) : -2.6} />
+          <Environment scene={scene} ground={!box && spec?.kind === 'diagram' ? (spec.ground ?? -2.6) : -2.6} size={box ? 60 : 26} />
           {box ? (
             <SandboxScene />
           ) : (
             <group ref={orient}>{spec && <ModelLayers spec={spec} />}</group>
           )}
-          <CameraRig resetKey={box ? 'sandbox' : spec} active={!paused} orient={orient} />
+          <CameraRig resetKey={box ? 'sandbox' : spec} active={!paused} orient={orient} homeRadius={box ? 15 : undefined} />
         </Canvas>
 
         <div key={box ? 'sandbox' : spec?.title} className="stage-title">
@@ -72,7 +73,16 @@ export function VisualStage({ spec, paused = false }: { spec: VisualSpec | null;
         <ControlBar busy={busy && !box} />
         {!box && <AskModel busy={busy} />}
       </div>
-      {box ? <SandboxPanel /> : <GestureGuide />}
+      {box ? (
+        <SandboxPanel />
+      ) : spec?.kind === 'anatomy' ? (
+        <div className="side-stack">
+          <AnatomyPanel spec={spec} />
+          <GestureGuide />
+        </div>
+      ) : (
+        <GestureGuide />
+      )}
     </div>
   );
 }

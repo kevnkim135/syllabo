@@ -9,9 +9,9 @@ type Script = (frame: number, tMs: number) => HandInput[];
 
 /** Runs a scripted sequence at 30 fps through a fresh interpreter. */
 function run(script: Script, frames: number) {
-  const cmds: Command[] = []; // everything except the per-frame pointer, which most tests do not care about
+  const cmds: Command[] = []; // everything except the per-frame pointer and the press, which most tests do not care about
   const all: Command[] = [];
-  const step = createGestureInterpreter((c) => (all.push(c), c.type !== 'pointer' && cmds.push(c)));
+  const step = createGestureInterpreter((c) => (all.push(c), c.type !== 'pointer' && c.type !== 'press' && cmds.push(c)));
   const out: GestureFrame[] = [];
   for (let i = 0; i < frames; i++) out.push(step(script(i, i * DT), 1000 + i * DT));
   return { cmds, all, out, types: [...new Set(cmds.map((c) => c.type))] };
@@ -323,6 +323,105 @@ test('sandbox mode: pointing and pinching never zoom or twirl, and rotation name
     const r = run(circling('screen'), 80);
     const rot = only(r.cmds, 'rotateAxis') as Extract<Command, { type: 'rotateAxis' }>[];
     assert.ok(rot.length > 10 && rot.every((c) => c.hand === 'left'), 'the user\'s left hand is holding');
+  } finally {
+    GESTURE.directManipulation = false;
+  }
+});
+
+test('holding: a carried object stays held through pinch flicker, a dropped tracking frame and the rotate gesture', () => {
+  // pinch held 2 s; at frames 30 and 31 the pinch reads as a three-finger pinch, frame 40 the hand is lost,
+  // frames 45-55 the other hand points (rotate mode); only the real release at frame 70 lets go
+  const r = run((i) => {
+    if (i === 40) return [];
+    const right = R(i < 70 ? (i === 30 || i === 31 ? { gather: true } : { pinch: true, at: [0.3 + 0.002 * i, 0.6] }) : { curl: POINT });
+    return i >= 45 && i < 55 ? [L({ curl: POINT }), right] : [right];
+  }, 90);
+  const g = (only(r.cmds, 'grab') as Extract<Command, { type: 'grab' }>[]).filter((x) => x.hand === 'right');
+  assert.equal(g.filter((x) => x.phase === 'start').length, 1, 'one grab');
+  const ends = g.filter((x) => x.phase === 'end');
+  assert.equal(ends.length, 1, 'one release');
+  const endFrame = r.all.findIndex((c) => c.type === 'grab' && c.phase === 'end');
+  assert.ok(r.all.slice(0, endFrame).filter((c) => c.type === 'grab' && c.phase === 'move').length > 20, 'kept moving the whole time');
+  assert.deepEqual(only(r.cmds, 'tap'), [], 'never mistaken for a tap');
+});
+
+test('holding: blurry half-open readings and the hand leaving the camera for a second keep the object held', () => {
+  const r = run((i) => {
+    if (i >= 30 && i < 60) return []; // hand out of the camera's view for 1 s
+    if (i >= 20 && i < 24) return [R({ curl: [0.3, 0.6, 0.6, 0.6], thumbCurl: 0.5 })]; // a blurry, half-open reading
+    return [R(i < 80 ? { pinch: true, at: [0.3 + 0.003 * i, 0.6] } : { curl: POINT })];
+  }, 100);
+  const g = (only(r.cmds, 'grab') as Extract<Command, { type: 'grab' }>[]).filter((x) => x.hand === 'right');
+  assert.deepEqual(g.filter((x) => x.phase !== 'move').map((x) => x.phase), ['start', 'end'], 'one grab, released only at the end');
+  const end = r.all.findIndex((c) => c.type === 'grab' && c.phase === 'end');
+  const lastMove = r.all.map((c, k) => (c.type === 'grab' && c.phase === 'move' ? k : -1)).filter((k) => k >= 0).at(-1)!;
+  assert.ok(lastMove < end, 'moves continue after the hand comes back');
+});
+
+test('depth: moving the pinch toward the camera pushes the object away, pulling back brings it closer', () => {
+  // the hand's apparent size grows as it approaches the camera: scale 1.8 -> 2.6 frame heights per metre
+  const toward = run((i) => [R({ pinch: true, at: [0.35, 0.6], scale: 1.8 + 0.8 * ramp(i, 15, 35) })], 50);
+  const dzT = (only(toward.cmds, 'grab') as Extract<Command, { type: 'grab' }>[]).reduce((s, g) => s + g.dz, 0);
+  assert.ok(dzT < -1, `toward the camera: dz ${dzT.toFixed(2)} (negative = into the scene, away from the viewer)`);
+  const back = run((i) => [R({ pinch: true, at: [0.35, 0.6], scale: 2.6 - 0.8 * ramp(i, 15, 35) })], 50);
+  const dzB = (only(back.cmds, 'grab') as Extract<Command, { type: 'grab' }>[]).reduce((s, g) => s + g.dz, 0);
+  assert.ok(dzB > 1, `away from the camera: dz ${dzB.toFixed(2)} (positive = toward the viewer)`);
+});
+
+test('responsive: a pinch that moves starts dragging at once, without waiting', () => {
+  const r = run((i) => [R(i >= 10 ? { pinch: true, at: [0.3 + 0.03 * Math.max(0, i - 11), 0.6] } : { curl: POINT })], 20);
+  const start = r.all.findIndex((c) => c.type === 'grab' && c.phase === 'start');
+  const pinchFrame = r.all.findIndex((c) => c.type === 'pointer') ; // pointer shows from the first frames
+  assert.ok(start >= 0, 'drag started');
+  const frames = r.all.slice(0, start).filter((c) => c.type === 'pointer').length;
+  assert.ok(frames <= 16, `started after ${frames} frames of pointer`);
+  void pinchFrame;
+});
+
+test('aim: pinching does not shift where you were pointing', () => {
+  // point steadily at one spot, then pinch: the fingertip itself moves toward the thumb, the aim must not
+  const r = run((i) => [R(i < 25 ? { curl: POINT, at: [0.35, 0.6] } : { pinch: true, at: [0.35, 0.6] })], 32);
+  const ps = only(r.all, 'pointer') as Extract<Command, { type: 'pointer' }>[];
+  const before = ps[22];
+  const during = ps.slice(26);
+  const shift = Math.max(...during.map((p) => Math.hypot(p.x - before.x, p.y - before.y)));
+  assert.ok(shift < 0.01, `aim moved ${shift.toFixed(3)} of the screen when pinching`);
+});
+
+test('sandbox: one hand pinching while the other points still grabs (and both hands can carry)', () => {
+  GESTURE.directManipulation = true;
+  try {
+    const r = run((i) => [L({ curl: POINT }), R({ pinch: true, at: [0.35 + 0.004 * i, 0.6] })], 40);
+    const g = (only(r.cmds, 'grab') as Extract<Command, { type: 'grab' }>[]).filter((x) => x.hand === 'right');
+    assert.equal(g[0]?.phase, 'start');
+    assert.ok(g.filter((x) => x.phase === 'move').length > 5);
+  } finally {
+    GESTURE.directManipulation = false;
+  }
+});
+
+test('press: selecting fires the moment the fingers close, even with the other fingers folded like a fist', () => {
+  for (const pinch of [{ pinch: true }, { pinch: true, curl: [0, 1, 1, 1] as [number, number, number, number] }]) {
+    const r = run((i) => [R(i < 10 ? { curl: POINT } : pinch)], 14);
+    const press = r.all.findIndex((c) => c.type === 'press');
+    assert.ok(press >= 0, `press for ${JSON.stringify(pinch)}`);
+    // within a couple of frames of the pinch starting (frame 10)
+    const framesBefore = r.out.slice(0, 14).findIndex((f) => f.hands[0]?.pose === 'pinch');
+    assert.ok(framesBefore >= 10 && framesBefore <= 11, `pinch seen at frame ${framesBefore}`);
+  }
+});
+
+test('open hand: held open it lets go once; a passing open hand does not; no model swipes in the sandbox', () => {
+  GESTURE.directManipulation = true;
+  try {
+    const held = run((i) => [R(i < 10 ? { curl: POINT } : {})], 40);
+    assert.deepEqual(only(held.cmds, 'openHand'), [{ type: 'openHand', hand: 'right' }]);
+    const flash = run((i) => [R(i >= 10 && i < 14 ? {} : { curl: POINT })], 30);
+    assert.deepEqual(only(flash.cmds, 'openHand'), []);
+    const swipe = run((i) => [R({ at: [0.25 + 0.5 * ramp(i, 15, 21), 0.6] })], 40);
+    assert.deepEqual(only(swipe.cmds, 'modelStep'), [], 'swiping is off in the sandbox');
+    const both = run(() => [L({}), R({})], 20);
+    assert.equal(only(both.cmds, 'openHand').length, 2, 'each hand reports its own opening');
   } finally {
     GESTURE.directManipulation = false;
   }

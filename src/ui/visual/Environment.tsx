@@ -24,7 +24,7 @@ import type { SceneKind } from '../../../shared/types';
  * a water surface. `plain` keeps the stage's own soft gradient (the canvas stays transparent).
  * `ground` is the y the floor sits at.
  */
-export function Environment({ scene = 'plain', ground = -2.2 }: { scene?: SceneKind; ground?: number }) {
+export function Environment({ scene = 'plain', ground = -2.2, size = 26 }: { scene?: SceneKind; ground?: number; size?: number }) {
   const fade = useRadialFade();
   switch (scene) {
     case 'space':
@@ -63,11 +63,11 @@ export function Environment({ scene = 'plain', ground = -2.2 }: { scene?: SceneK
       return (
         <>
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, ground - 0.02, 0]}>
-            <planeGeometry args={[26, 26]} />
+            <planeGeometry args={[size, size]} />
             <meshStandardMaterial color="#ffffff" roughness={0.9} transparent opacity={0.8} alphaMap={fade} depthWrite={false} />
           </mesh>
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, ground, 0]}>
-            <planeGeometry args={[26, 26, 26, 26]} />
+            <planeGeometry args={[size, size, Math.round(size), Math.round(size)]} />
             <meshBasicMaterial color="#b9a0f0" wireframe transparent opacity={0.35} alphaMap={fade} depthWrite={false} />
           </mesh>
         </>

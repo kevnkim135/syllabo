@@ -132,7 +132,7 @@ export const POSE = {
   extended: 0.85, // straightness above this = finger extended
   curled: 0.7, // straightness below this = finger curled (for "point")
   fist: 0.6, // all four fingers below this = fist
-  pinchOn: 0.28, // pinch ratio to start a pinch
+  pinchOn: 0.33, // pinch ratio to start a pinch (registers a little before the fingertips fully touch)
   pinchOff: 0.42, // pinch ratio to end it (hysteresis)
   uniform: 0.25, // max spread of the four straightness values for "all fingers move together"
   gatherMiddle: 0.27, // middle tip within this of BOTH the thumb and index tips (hand sizes) = three-finger pinch; off at +0.1
@@ -169,7 +169,9 @@ export function classifyHand(lm: Pt[], wasPinching = false, hint?: { name: strin
   const straight = fingerStraightness(lm);
   const pinch = pinchRatio(lm);
   const isFist = straight.every((s) => s < POSE.fist);
-  const pinching = !isFist && pinch < (wasPinching ? POSE.pinchOff : POSE.pinchOn);
+  // Thumb tip on index tip is a pinch even when the other fingers are folded (that is how most people pinch);
+  // in a real fist the thumb wraps over the fingers, so its tip is not on the index tip.
+  const pinching = pinch < (wasPinching ? POSE.pinchOff : POSE.pinchOn);
   const size = handSize(lm);
   const middleGap = dist3(lm[4], lm[12]) / size;
   const gatherTol = POSE.gatherMiddle + (wasGathering ? 0.1 : 0);
@@ -184,9 +186,9 @@ export function classifyHand(lm: Pt[], wasPinching = false, hint?: { name: strin
     dist3(lm[4], lm[13]) / size > POSE.spreadThumbOut &&
     dist3(lm[8], lm[12]) / size > POSE.spreadFingers;
   let pose: Pose = 'other';
-  if (isFist) pose = 'fist';
-  else if (gathering) pose = 'gather';
+  if (gathering) pose = 'gather';
   else if (pinching) pose = 'pinch';
+  else if (isFist) pose = 'fist';
   else if (spreading) pose = 'spread';
   else if (straight[0] > POSE.pointIndex && straight.slice(1).every((s) => s < POSE.pointOthers) && straight[0] - Math.max(...straight.slice(1)) > POSE.pointMargin) pose = 'point';
   else if (straight.every((s) => s > POSE.extended)) pose = 'open';

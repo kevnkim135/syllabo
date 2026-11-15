@@ -103,7 +103,42 @@ export interface DiagramSpec {
   elements: DiagramElement[]; // coordinates roughly within -5..5
 }
 
-export type VisualSpec = MoleculeSpec | SurfaceSpec | DiagramSpec;
+/** Hand-built, detailed models for the most common biology and psychology topics. */
+export const ANATOMY_MODELS = ['brain', 'neuron', 'cell', 'dna', 'heart'] as const;
+export type AnatomyModel = (typeof ANATOMY_MODELS)[number];
+export const PART_SHAPES = ['sphere', 'ellipsoid', 'blob', 'capsule', 'cylinder', 'cone', 'torus', 'box', 'tube'] as const;
+export type PartShape = (typeof PART_SHAPES)[number];
+export const PART_SURFACES = ['smooth', 'folded', 'bumpy', 'glossy', 'translucent'] as const;
+export type PartSurface = (typeof PART_SURFACES)[number];
+
+/** One named, clickable piece of a realistic model (an organ, a lobe, an organelle, a vessel...). */
+export interface AnatomyPart {
+  name: string;
+  shape: PartShape;
+  position: [number, number, number];
+  size: [number, number, number]; // full extent in x, y, z (tube: radius in x; path below)
+  rotation?: [number, number, number]; // degrees
+  color: string;
+  surface?: PartSurface;
+  path?: [number, number, number][]; // tube only: the points it runs through
+  info?: string; // one or two sentences: what it is and what it does
+}
+
+/**
+ * A realistic, colored 3D structure: biology, anatomy, psychology / neuroscience, medicine, geology...
+ * Either a built-in model (with optional part notes) or one composed from parts.
+ */
+export interface AnatomySpec {
+  kind: 'anatomy';
+  title: string;
+  scene?: SceneKind;
+  model?: AnatomyModel;
+  parts?: AnatomyPart[];
+  notes?: Record<string, string>; // built-in models: part name -> what to say about it for this lesson
+  focus?: string[]; // part names to highlight first
+}
+
+export type VisualSpec = MoleculeSpec | SurfaceSpec | DiagramSpec | AnatomySpec;
 
 export interface LessonMap {
   timeline: TimelineEvent[];

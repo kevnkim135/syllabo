@@ -152,7 +152,7 @@ export function SandboxPanel() {
           <li>Say "add a car and a ball", "push the car right with 2000 newtons", "turn off friction", "make collisions elastic", or add a sun and a planet and push the planet sideways to make it orbit.</li>
         )}
         <li>Mouse: click to select, shift-click for several, drag to move; let go while moving to throw.</li>
-        <li>Hands: point and pinch quickly to add an object to your group; pinch and hold to carry it (each hand can carry its own). To turn one, pinch it with one hand and draw circles with the other index finger.</li>
+        <li>Hands: point and pinch quickly to add an object to your group; pinch and hold to carry it (each hand can carry its own). To turn one, pinch it with one hand and draw circles with the other index finger. Show an open hand to let go of everything that hand picked (both hands: everything).</li>
       </ul>
     </aside>
   );
