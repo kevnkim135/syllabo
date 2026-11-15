@@ -35,3 +35,14 @@ test('anatomy models: built-ins pass, composed parts are cleaned, a tube needs a
   assert.ok(v && v.kind === 'anatomy' && v.parts?.length === 1 && v.parts[0].name === 'Chloroplast');
   assert.equal(validate('visual', { kind: 'anatomy', title: 'Nothing' }), undefined);
 });
+
+test('LaTeX with single backslashes in JSON is recovered, not thrown away', async () => {
+  const { extractJson } = await import('../server/llm');
+  const { repairLatex } = await import('../server/validate');
+  const raw = '{"a": "$\\sqrt{2} \\cdot \\alpha$", "b": "$\\frac{1}{2}$", "c": "line\\nbreak", "d": "$\\\\pi$"}';
+  const v = extractJson(raw) as Record<string, string>;
+  assert.equal(v.a, '$\\sqrt{2} \\cdot \\alpha$');
+  assert.equal(repairLatex(v.b), '$\\frac{1}{2}$');
+  assert.equal(v.c, 'line\nbreak');
+  assert.equal(v.d, '$\\pi$');
+});

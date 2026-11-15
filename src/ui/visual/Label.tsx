@@ -1,14 +1,16 @@
 import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
+import { plainMath } from '../math/MathText';
 
 /**
  * Text label as a camera-facing sprite drawn to a canvas texture. It stays inside the WebGL scene
  * (no DOM overlay), so it unmounts cleanly and is never clipped by other UI.
  */
-export function Label({ text, position = [0, 0, 0], height = 0.32 }: { text: string; position?: [number, number, number]; height?: number }) {
+export function Label({ text: raw, position = [0, 0, 0], height = 0.32 }: { text: string; position?: [number, number, number]; height?: number }) {
+  const text = plainMath(raw); // LaTeX cannot render on a canvas: show v₀², α, 1/2 instead of $v_0^2$
   const { texture, aspect } = useMemo(() => {
-    const px = 48;
-    const pad = 22;
+    const px = 72; // drawn large and mipmapped, so labels stay sharp when zoomed in
+    const pad = 32;
     const c = document.createElement('canvas');
     const ctx = c.getContext('2d')!;
     const font = `600 ${px}px Inter, system-ui, sans-serif`;
@@ -23,7 +25,7 @@ export function Label({ text, position = [0, 0, 0], height = 0.32 }: { text: str
     ctx.roundRect(1.5, 1.5, c.width - 3, c.height - 3, (c.height - 3) / 2);
     ctx.fill();
     ctx.globalAlpha = 1;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 3;
     ctx.strokeStyle = 'rgba(30, 30, 40, 0.18)';
     ctx.stroke();
     ctx.fillStyle = '#23232d';
@@ -31,7 +33,9 @@ export function Label({ text, position = [0, 0, 0], height = 0.32 }: { text: str
     ctx.fillText(text, pad, c.height / 2 + 2);
     const texture = new THREE.CanvasTexture(c);
     texture.colorSpace = THREE.SRGBColorSpace;
-    texture.anisotropy = 4;
+    texture.anisotropy = 8;
+    texture.generateMipmaps = true;
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
     return { texture, aspect: c.width / c.height };
   }, [text]);
 

@@ -1,3 +1,4 @@
+import { plainMath } from '../math/MathText';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { GESTURE, GESTURE_GUIDE, startGestures, type GestureLabel } from '../../core/input/gestures';
 import { startKeyboard } from '../../core/input/keyboard';
@@ -200,7 +201,7 @@ export function InputControls() {
             <>
               <p className={heard.final ? '' : 'interim'}>“{heard.transcript}”</p>
               {assistant && assistant.heard === heard.transcript ? (
-                <p className={assistant.state === 'unsure' ? 'muted' : assistant.state === 'thinking' ? 'did pulse' : 'did'}>{assistant.say}</p>
+                <p className={assistant.state === 'unsure' ? 'muted' : assistant.state === 'thinking' ? 'did pulse' : 'did'}>{plainMath(assistant.say)}</p>
               ) : heard.actions.length > 0 ? (
                 <p className="did">{heard.actions.join(' · ')}</p>
               ) : (

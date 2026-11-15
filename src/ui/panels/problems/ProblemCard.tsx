@@ -99,7 +99,7 @@ export function PendingCard({ job }: { job: Job }) {
         {job.question ? (
           <p className="prompt">
             {job.source === 'spoken' && <span className="heard-label">Heard</span>}
-            {job.source === 'spoken' ? `“${job.question}”` : job.question}
+            <MathText text={job.source === 'spoken' ? `“${job.question}”` : job.question} />
           </p>
         ) : (
           <p className="prompt muted">{job.shot?.name}</p>

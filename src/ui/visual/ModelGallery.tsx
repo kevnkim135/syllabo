@@ -1,3 +1,4 @@
+import { plainMath } from '../math/MathText';
 import { lesson, useLesson } from '../../core/lesson';
 
 /** Every model built in this lesson. Swipe left / right with an open hand, say "next model", or press [ and ]. */
@@ -11,7 +12,7 @@ export function ModelGallery() {
       </button>
       <div className="gallery-dots">
         {models.map((m, i) => (
-          <button key={i} className={i === modelIndex ? 'on' : ''} onClick={() => lesson.selectModel(i)} title={m.title} aria-label={`Model ${i + 1}: ${m.title}`} />
+          <button key={i} className={i === modelIndex ? 'on' : ''} onClick={() => lesson.selectModel(i)} title={plainMath(m.title)} aria-label={`Model ${i + 1}: ${plainMath(m.title)}`} />
         ))}
       </div>
       <span className="gallery-count">

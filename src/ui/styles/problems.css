@@ -101,6 +101,11 @@
 .problems .one-at-a-time .prompt { font-size: 1.08rem; line-height: 1.65; }
 .problems .oat-nav { display: flex; align-items: center; justify-content: space-between; }
 /* math */
-.math-block { display: block; overflow-x: auto; overflow-y: hidden; padding: 0.35rem 0; }
-.math-inline .katex { font-size: 1.05em; }
+.math-block { display: block; overflow-x: auto; overflow-y: hidden; padding: 0.5rem 0.1rem; margin: 0.15rem 0; scrollbar-width: thin; }
+.math-block .katex-display { margin: 0; }
+.math-block .katex { font-size: 1.18em; }
+.math-inline { padding: 0 0.06em; }
+.math-inline .katex { font-size: 1.08em; }
+.katex { text-rendering: geometricPrecision; -webkit-font-smoothing: antialiased; color: inherit; }
+.katex .katex-error { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; border-bottom: 1px dashed currentColor; }
 .problems .prompt, .problems .step-text { white-space: pre-line; }

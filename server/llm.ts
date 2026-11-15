@@ -149,8 +149,16 @@ export function extractJson(text: string): unknown {
   const start = t.search(/[[{]/);
   const end = Math.max(t.lastIndexOf('}'), t.lastIndexOf(']'));
   if (start >= 0 && end > start) {
+    const body = t.slice(start, end + 1);
     try {
-      return JSON.parse(t.slice(start, end + 1));
+      return JSON.parse(body);
+    } catch {
+      /* fall through */
+    }
+    // LaTeX written with single backslashes ("\sqrt", "\alpha", "\cdot") is an invalid JSON escape and
+    // breaks the whole reply: double every backslash that does not start a valid escape, then parse again.
+    try {
+      return JSON.parse(body.replace(/\\\\|\\(?!["\\/bfnrtu])/g, (m) => (m.length === 2 ? m : '\\\\')));
     } catch {
       /* fall through */
     }

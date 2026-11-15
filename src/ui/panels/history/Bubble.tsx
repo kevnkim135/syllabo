@@ -1,4 +1,4 @@
-import { splitMath } from '../../math/MathText';
+import { MathText, splitMath } from '../../math/MathText';
 import { Fragment, type ReactNode, useEffect, useRef } from 'react';
 import type { TopicDetail } from '../../../../shared/types';
 import { lesson } from '../../../core/lesson';
@@ -174,8 +174,8 @@ function Entry({ detail, related, terms, isOpen, onTerm }: EntryProps) {
             {subtopics.map((s) => (
               <li key={s.title}>
                 <button className={`h-sub${isOpen(s.title) ? ' on' : ''}`} onClick={() => onTerm(s.title)} aria-pressed={isOpen(s.title)}>
-                  <span className="h-link-text">{s.title}</span>
-                  {s.summary && <span className="h-sub-summary">{s.summary}</span>}
+                  <MathText className="h-link-text" text={s.title} />
+                  {s.summary && <MathText className="h-sub-summary" text={s.summary} />}
                 </button>
               </li>
             ))}

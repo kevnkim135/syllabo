@@ -1,3 +1,4 @@
+import { plainMath } from '../math/MathText';
 import { useState, type FormEvent } from 'react';
 import { lesson, useLesson, useWorkspace } from '../../core/lesson';
 import { lessonTitle, useLibrary } from '../../core/library';
@@ -51,7 +52,7 @@ export function Home() {
                 <div className="chips">
                   {tabs.map((t) => (
                     <button key={t.id} type="button" className="chip resume" onClick={() => lesson.switchTo(t.id)}>
-                      {t.title}
+                      {plainMath(t.title)}
                     </button>
                   ))}
                 </div>
