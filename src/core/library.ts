@@ -12,6 +12,7 @@ export interface SandboxItem {
   body?: SandboxBody;
   pos: [number, number, number];
   vel?: [number, number, number]; // bodies only
+  rot?: [number, number, number, number]; // orientation quaternion (x, y, z, w)
   scale: number;
 }
 export interface SandboxReaction {

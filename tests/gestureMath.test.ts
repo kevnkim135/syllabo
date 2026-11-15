@@ -247,3 +247,17 @@ test('fitCircle finds the true centre from a partial arc; a straight line has no
   near(c[1], -1, 1e-9);
   assert.equal(fitCircle(Array.from({ length: 10 }, (_, i): [number, number] => [i, 2 * i])), null);
 });
+
+import { handDepth } from '../src/utils/gestureMath';
+test('handDepth: curling the fingers into a pinch does not read as moving toward or away from the camera', () => {
+  const at = (o: object, dist = 0.5) => {
+    const s = 0.9 / dist;
+    const h = makeHand({ ...o, scale: s, aspect: 4 / 3, at: [0.5, 0.5] });
+    return handDepth(h.image, h.world, 4 / 3, 0.9);
+  };
+  const open = at({ curl: [0, 1, 1, 1] });
+  near(at({ pinch: true }), open, 1e-6);
+  near(at({ curl: [0.4, 1, 1, 1] }), open, 1e-6);
+  near(open, 0.5, 1e-6);
+  near(at({ curl: [0, 1, 1, 1] }, 0.62), 0.62, 1e-6); // but really moving the hand does
+});

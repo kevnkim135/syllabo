@@ -1,8 +1,9 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import type * as THREE from 'three';
 import type { VisualSpec } from '../../../shared/types';
 import { lesson, useLesson } from '../../core/lesson';
+import { GESTURE } from '../../core/input/gestureEngine';
 import { AskModel } from './AskModel';
 import { CameraRig } from './CameraRig';
 import { ControlBar } from './ControlBar';
@@ -19,6 +20,13 @@ export function VisualStage({ spec, paused = false }: { spec: VisualSpec | null;
   const box = stageMode === 'sandbox';
   const busy = box ? !!sandbox.busy : !!loading.visual;
   const orient = useRef<THREE.Group>(null);
+  // In the sandbox, pointing and pinching only select, carry and rotate: no hold-zoom poses, no twirl.
+  useEffect(() => {
+    GESTURE.directManipulation = box && !paused;
+    return () => {
+      GESTURE.directManipulation = false;
+    };
+  }, [box, paused]);
   const scene = box ? 'lab' : (spec?.scene ?? (spec?.kind === 'molecule' ? 'lab' : 'plain'));
 
   return (

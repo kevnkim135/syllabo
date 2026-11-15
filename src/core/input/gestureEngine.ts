@@ -42,6 +42,7 @@ import {
   norm,
   normalize,
   tipPosition,
+  handDepth,
   windingStats,
   type HandShape,
   type Pose,
@@ -101,7 +102,11 @@ export const GESTURE = {
   // Direct manipulation (point, tap, grab)
   tapMs: 320, // a pinch released sooner than this is a tap; held longer it becomes a grab
   tapMaxMove: 0.04, // screen fraction the pinch may drift and still count as a tap
+  /** Set by the app while the sandbox is on screen: hold-to-zoom poses and twirl are off, so pointing and
+   *  pinching only ever select, carry and rotate objects. */
+  directManipulation: false,
   grabDepthGain: 3, // scene units of depth per metre the hand moves toward / away from the camera
+  grabDepthEngage: 0.05, // metres the hand must move in depth before depth starts to follow (then it follows)
   grabDepthSmoothing: 0.2, // 0..1 per frame; depth from a single camera is noisy, so it is heavily smoothed
   grabDepthDeadZone: 0.012, // scene units per frame ignored, so depth only moves on purpose
   scaleDeadZone: 0.01,
@@ -166,16 +171,25 @@ export const GESTURE_GUIDE: { gesture: string; action: string }[] = [
 interface SideState {
   imageFilter: ReturnType<typeof landmarkFilter>;
   worldFilter: ReturnType<typeof landmarkFilter>;
+  tipFilter: ReturnType<typeof landmarkFilter>; // smooths the 3D fingertip AFTER fitting on raw landmarks
   pinching: boolean;
   gathering: boolean;
 }
-const newSide = (): SideState => ({ imageFilter: landmarkFilter(GESTURE.imageFilter), worldFilter: landmarkFilter(GESTURE.worldFilter), pinching: false, gathering: false });
+const newSide = (): SideState => ({
+  imageFilter: landmarkFilter(GESTURE.imageFilter),
+  worldFilter: landmarkFilter(GESTURE.worldFilter),
+  tipFilter: landmarkFilter(GESTURE.worldFilter),
+  pinching: false,
+  gathering: false,
+});
 
 interface Seen extends TrackedHand {
   shape: HandShape;
   form: Pt[]; // isotropic landmarks used for shape and direction (world if available)
   world?: Pt[]; // filtered metric landmarks, when MediaPipe gives them
   palm: { x: number; y: number }; // RAW palm centre in frame heights (unfiltered: swipes must not lag)
+  tip3: Vec3; // index fingertip in metres (view space): fitted on raw landmarks, then smoothed
+  depth: number; // the hand's distance from the camera in metres (palm only), raw
 }
 
 export function createGestureInterpreter(emit: (cmd: Command) => void = commands.emit) {
@@ -206,7 +220,7 @@ export function createGestureInterpreter(emit: (cmd: Command) => void = commands
   let homeFired = false;
   // direct manipulation
   // per hand: pinch-to-tap / pinch-and-hold-to-drag, and whether its pointer is showing
-  type Track = { down: number; start: { x: number; y: number }; last: { x: number; y: number }; z: number; dragging: boolean };
+  type Track = { down: number; start: { x: number; y: number }; last: { x: number; y: number }; z: number; z0: number; depthOn: boolean; dragging: boolean };
   const tracks: Partial<Record<Hand, Track>> = {};
   const pointerShown: Partial<Record<Hand, boolean>> = {};
   let scaleSpan: number | null = null;
@@ -237,7 +251,12 @@ export function createGestureInterpreter(emit: (cmd: Command) => void = commands
         x: (palmIds.reduce((s, k) => s + h.image[k].x, 0) / 5) * G.aspect,
         y: palmIds.reduce((s, k) => s + h.image[k].y, 0) / 5,
       };
-      return { side, pose: shape.pose, image, shape, form, world, palm };
+      // 3D: fit on the RAW landmarks (per-landmark filtering distorts the palm's apparent size), then smooth the result
+      const rawTip = tipPosition(h.image, h.world, G.aspect, G.focal);
+      const [ft] = st.tipFilter([{ x: rawTip[0], y: rawTip[1], z: rawTip[2] }], now);
+      const tip3: Vec3 = [ft.x, ft.y, ft.z ?? 0];
+      const depth = handDepth(h.image, h.world, G.aspect, G.focal);
+      return { side, pose: shape.pose, image, shape, form, world, palm, tip3, depth };
     });
     sides = next; // filters of hands that left the frame are dropped, so they restart cleanly
     return seen;
@@ -246,16 +265,16 @@ export function createGestureInterpreter(emit: (cmd: Command) => void = commands
   function candidate(seen: Seen[]): Mode {
     if (seen.length === 1) {
       const pose = seen[0].pose;
-      if (pose === 'point') return 'point';
-      if (pose === 'gather') return 'gather';
-      if (pose === 'spread') return 'spread';
+      if (pose === 'point') return G.directManipulation ? 'none' : 'point'; // no twirl in the sandbox
+      if (pose === 'gather') return G.directManipulation ? 'none' : 'gather'; // no hold-zoom in the sandbox
+      if (pose === 'spread') return G.directManipulation ? 'none' : 'spread';
       if (pose === 'open') return 'hand';
       if (pose === 'pinch') return 'grab';
       return 'none';
     }
     if (seen.length === 2) {
       if (seen.every((h) => h.pose === 'fist')) return 'fists';
-      if (mode !== 'rotate' && seen.every((h) => h.shape.pinching)) return 'scale';
+      if (mode !== 'rotate' && !G.directManipulation && seen.every((h) => h.shape.pinching)) return 'scale';
       const clutch = pickClutch(seen);
       if (!clutch) return 'none';
       const steer = seen.find((h) => h !== clutch)!;
@@ -296,14 +315,14 @@ export function createGestureInterpreter(emit: (cmd: Command) => void = commands
       present.add(side);
       const pinch = mode !== 'rotate' && (h.pose === 'pinch' || (mode === 'scale' && h.shape.pinching && h.pose !== 'gather'));
       const sp = screenPoint(h);
-      const z = tipPosition(h.image, h.world, G.aspect, G.focal)[2] * G.grabDepthGain;
+      const z = h.depth * G.grabDepthGain; // the palm, so curling into a pinch is not depth (smoothed below)
       const t = tracks[side];
       if (mode === 'rotate' && t) {
         // this pinch turned out to be the rotate clutch: it was never a tap or a drag
         if (t.dragging) emit({ type: 'grab', hand: side, phase: 'end', dx: 0, dy: 0, dz: 0 });
         delete tracks[side];
       } else if (pinch && !t) {
-        tracks[side] = { down: now, start: sp, last: sp, z, dragging: false };
+        tracks[side] = { down: now, start: sp, last: sp, z, z0: z, depthOn: false, dragging: false };
       } else if (pinch && t) {
         if (!t.dragging && now - t.down >= G.tapMs) {
           t.dragging = true;
@@ -313,7 +332,9 @@ export function createGestureInterpreter(emit: (cmd: Command) => void = commands
         if (t.dragging) {
           const dx = sp.x - t.last.x;
           const dy = sp.y - t.last.y;
-          let dz = zs - t.z;
+          // depth only follows after a deliberate push or pull, so pinching itself never moves things in depth
+          if (!t.depthOn && Math.abs(zs - t.z0) > G.grabDepthEngage * G.grabDepthGain) t.depthOn = true;
+          let dz = t.depthOn ? zs - t.z : 0;
           if (Math.abs(dz) < G.grabDepthDeadZone) dz = 0;
           if (Math.abs(dx) + Math.abs(dy) > 0.0015 || dz) emit({ type: 'grab', hand: side, phase: 'move', dx, dy, dz });
         }
@@ -440,7 +461,7 @@ export function createGestureInterpreter(emit: (cmd: Command) => void = commands
    * to x, y or z), by the angle the fingertip swept around the circle's centre since the last frame.
    */
   function actRotate(steer: Seen, now: number) {
-    const p = tipPosition(steer.image, steer.world, G.aspect, G.focal);
+    const p = steer.tip3;
     if (!acted) rotTrail = [];
     rotTrail.push({ p, t: now });
     while (rotTrail.length && now - rotTrail[0].t > G.rotateWindowMs) rotTrail.shift();
@@ -449,6 +470,11 @@ export function createGestureInterpreter(emit: (cmd: Command) => void = commands
     if (c.radius < G.rotateMinRadius || c.coherence < G.rotateMinCoherence || norm(c.area) < 1e-9) return;
     let axis: Vec3;
     if (G.rotateSnap) {
+      if (rotAxis === null) {
+        // do not start until one axis clearly dominates (the first moments of a circle are ambiguous)
+        const m = c.area.map(Math.abs).sort((a, b) => b - a);
+        if (m[0] < m[1] * 1.6) return;
+      }
       rotAxis = dominantAxis(c.area, rotAxis, G.rotateAxisMargin);
       axis = [0, 0, 0];
       axis[rotAxis] = Math.sign(c.area[rotAxis]) || 1;
@@ -467,7 +493,7 @@ export function createGestureInterpreter(emit: (cmd: Command) => void = commands
     const rel = (v: Vec3): Vec3 => [v[0] - centre[0], v[1] - centre[1], v[2] - centre[2]];
     const angle = angleAbout(axis, rel(prev), rel(p));
     if (angle <= 0 || angle > G.rotateMaxStep) return; // only turns in the circle's own direction; skip glitches
-    emit({ type: 'rotateAxis', axis, angle: angle * G.rotateGain });
+    emit({ type: 'rotateAxis', axis, angle: angle * G.rotateGain, hand: (clutchSide ?? undefined) as Hand | undefined });
   }
 
   return function step(hands: HandInput[], now: number): GestureFrame {

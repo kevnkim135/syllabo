@@ -260,6 +260,13 @@ export function rotationBetween(from: Vec3, to: Vec3): { axis: Vec3; angle: numb
  * Distance = focal / s; the hand centre's lateral position = image offset / s; the fingertip is that
  * centre plus its world offset. Without world landmarks, an average hand size stands in.
  */
+/** Distance of the hand from the camera in metres, from the rigid palm only (finger curl does not change it). */
+export function handDepth(image: Pt[], world: Pt[] | undefined, aspect: number, focal: number): number {
+  const p = tipPosition(image, world, aspect, focal);
+  const t = world?.[8];
+  return p[2] - (t?.z ?? 0); // tip depth minus the tip's own offset from the hand = the hand's depth
+}
+
 export function tipPosition(image: Pt[], world: Pt[] | undefined, aspect: number, focal: number): Vec3 {
   const cx = 0.5 * aspect;
   const cy = 0.5;
@@ -268,15 +275,18 @@ export function tipPosition(image: Pt[], world: Pt[] | undefined, aspect: number
     const s = dist(img[0], img[9]) / 0.09 || 1e-6; // wrist to middle knuckle is about 9 cm
     return toView([(img[8].x - cx) / s, (img[8].y - cy) / s, focal / s]);
   }
-  const n = world.length;
-  const mi = { x: img.reduce((a, p) => a + p.x, 0) / n, y: img.reduce((a, p) => a + p.y, 0) / n };
-  const mw = { x: world.reduce((a, p) => a + p.x, 0) / n, y: world.reduce((a, p) => a + p.y, 0) / n };
+  // Fit on the palm only (wrist, thumb base, the four knuckles): it is rigid, so curling the fingers into a
+  // pinch does not read as the hand moving toward or away from the camera.
+  const PALM = [0, 1, 5, 9, 13, 17];
+  const n = PALM.length;
+  const mi = { x: PALM.reduce((a, q) => a + img[q].x, 0) / n, y: PALM.reduce((a, q) => a + img[q].y, 0) / n };
+  const mw = { x: PALM.reduce((a, q) => a + world[q].x, 0) / n, y: PALM.reduce((a, q) => a + world[q].y, 0) / n };
   let num = 0;
   let den = 0;
-  for (let i = 0; i < n; i++) {
-    const wx = world[i].x - mw.x;
-    const wy = world[i].y - mw.y;
-    num += (img[i].x - mi.x) * wx + (img[i].y - mi.y) * wy;
+  for (const q of PALM) {
+    const wx = world[q].x - mw.x;
+    const wy = world[q].y - mw.y;
+    num += (img[q].x - mi.x) * wx + (img[q].y - mi.y) * wy;
     den += wx * wx + wy * wy;
   }
   const s = num / (den || 1e-12) || 1e-6;

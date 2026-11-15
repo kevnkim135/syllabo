@@ -500,6 +500,10 @@ export const lesson = {
       update(s.id, { sandbox: { ...s.sandbox, items } });
     });
   },
+  /** Store orientations after a rotation gesture (the scene rotates live, then reports here). */
+  sandboxSetRot(rots: Record<string, [number, number, number, number]>) {
+    withActive((s) => update(s.id, { sandbox: { ...s.sandbox, items: s.sandbox.items.map((i) => (rots[i.id] ? { ...i, rot: rots[i.id] } : i)) } }));
+  },
   sandboxRemove(ids: string[]) {
     withActive((s) =>
       update(s.id, { sandbox: { ...s.sandbox, items: s.sandbox.items.filter((i) => !ids.includes(i.id)), selected: s.sandbox.selected.filter((i) => !ids.includes(i)) } }),

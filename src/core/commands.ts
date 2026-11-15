@@ -7,7 +7,7 @@ export type Hand = 'left' | 'right';
 export type Command =
   // ---- camera (handled by the 3D stage) ----
   | { type: 'rotate'; dx: number; dy: number } // radians: yaw, pitch
-  | { type: 'rotateAxis'; axis: [number, number, number]; angle: number } // radians about a view-space axis
+  | { type: 'rotateAxis'; axis: [number, number, number]; angle: number; hand?: Hand } // radians about a view-space axis; hand = the pinching (holding) hand
   | { type: 'zoom'; factor: number } // <1 zooms in, >1 zooms out
   | { type: 'view'; view: 'top' | 'front' | 'side' }
   | { type: 'reset' }

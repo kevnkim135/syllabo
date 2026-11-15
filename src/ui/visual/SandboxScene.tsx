@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import { commands, type Hand } from '../../core/commands';
@@ -60,7 +60,7 @@ export function SandboxScene() {
   const drags = useRef(new Map<Pointer, Drag>());
   const pointers = useRef(new Map<Hand, THREE.Vector2>());
   const hover = useRef(new Map<Hand, string | null>());
-  const [hovered, setHovered] = useState<string[]>([]);
+  const hoverSince = useRef(new Map<string, number>()); // last time each object was under a pointer (for a calm halo)
   const cursors = { left: useRef<THREE.Mesh>(null), right: useRef<THREE.Mesh>(null) };
   const items = useRef(sandbox.items);
   items.current = sandbox.items;
@@ -69,6 +69,12 @@ export function SandboxScene() {
   const contactRef = useRef<string[] | null>(null);
   const lastEvent = useRef(0);
   const lastSync = useRef(0);
+  const born = useRef(new Set<string>()); // objects that have already bloomed in
+  if (import.meta.env.DEV) (window as unknown as { __sandboxGroups?: unknown }).__sandboxGroups = groups; // inspection in dev only
+  const spin = useRef<{ ids: string[]; until: number } | null>(null);
+  const liveRot = useRef(new Map<string, THREE.Quaternion>()); // orientations while a rotate gesture is running
+  const spinCommit = useRef(0);
+  const byId = (id: string) => items.current.find((i) => i.id === id);
 
   const draggedIds = () => new Set([...drags.current.values()].flatMap((d) => d.ids));
 
@@ -81,6 +87,7 @@ export function SandboxScene() {
     const list = items.current;
     const ids = new Set(list.map((i) => i.id));
     for (const id of sims.current.keys()) if (!ids.has(id)) sims.current.delete(id); // removed or reacted away
+    for (const id of groups.current.keys()) if (!ids.has(id)) groups.current.delete(id), born.current.delete(id);
     for (const it of list) {
       if (!isBody(it)) continue;
       const s = sims.current.get(it.id);
@@ -172,8 +179,31 @@ export function SandboxScene() {
             const back = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 2); // toward the viewer
             moveDrag(cmd.hand, right.multiplyScalar(cmd.dx * w).addScaledVector(up, -cmd.dy * h).addScaledVector(back, cmd.dz));
           } else endDrag(cmd.hand);
-        } else if (cmd.type === 'scaleSel') {
-          if (drags.current.size === 0 && selected.current.length) lesson.sandboxScale(selected.current, cmd.factor);
+        } else if (cmd.type === 'rotateAxis') {
+          // pinch an object with one hand and circle with the other: that object turns about the circle's axis
+          const now = performance.now();
+          if (!spin.current || now > spin.current.until) {
+            const held = cmd.hand ? hover.current.get(cmd.hand) : null;
+            const ids = held ? (selected.current.includes(held) ? selected.current : [held]) : selected.current;
+            spin.current = { ids, until: 0 };
+          }
+          spin.current.until = now + 450;
+          if (!spin.current.ids.length) return;
+          const axis = new THREE.Vector3(...cmd.axis).applyQuaternion(camera.quaternion).normalize(); // view -> world
+          const turn = new THREE.Quaternion().setFromAxisAngle(axis, cmd.angle);
+          for (const id of spin.current.ids) {
+            const it = byId(id);
+            const q = liveRot.current.get(id) ?? new THREE.Quaternion(...(it?.rot ?? [0, 0, 0, 1]));
+            liveRot.current.set(id, turn.clone().multiply(q));
+          }
+          clearTimeout(spinCommit.current);
+          spinCommit.current = window.setTimeout(() => {
+            const rots: Record<string, [number, number, number, number]> = {};
+            for (const [id, q] of liveRot.current) rots[id] = [q.x, q.y, q.z, q.w];
+            lesson.sandboxSetRot(rots);
+            liveRot.current.clear();
+            spin.current = null;
+          }, 500);
         } else if (cmd.type === 'impulse') {
           for (const id of cmd.ids) sims.current.get(id)?.vel.add(new THREE.Vector3(...cmd.dv));
         }
@@ -292,6 +322,9 @@ export function SandboxScene() {
         g.position.lerp(target, off ? 1 : it.dying ? k * 0.8 : k);
       }
       g.scale.setScalar(THREE.MathUtils.lerp(g.scale.x, it.dying ? 0 : it.scale, k));
+      const q = liveRot.current.get(it.id) ?? (it.rot ? new THREE.Quaternion(...it.rot) : null);
+      const body = g.getObjectByName('shape');
+      if (body) q ? body.quaternion.slerp(q, 0.5) : body.quaternion.identity();
       // velocity arrow for moving bodies
       const arrow = g.getObjectByName('vel') as THREE.ArrowHelper | undefined;
       if (arrow) {
@@ -340,8 +373,20 @@ export function SandboxScene() {
         cur.quaternion.copy(camera.quaternion);
       }
     }
-    const nowList = [...now].sort();
-    if (nowList.join() !== hovered.join()) setHovered(nowList);
+    // halos: selected, touching (orange) or pointed at; a short grace period stops them flickering at edges
+    const tNow = performance.now();
+    for (const id of now) hoverSince.current.set(id, tNow);
+    for (const it of list) {
+      const halo = groups.current.get(it.id)?.getObjectByName('halo') as THREE.Mesh | undefined;
+      if (!halo) continue;
+      const hot = tNow - (hoverSince.current.get(it.id) ?? -1e9) < 250;
+      const on = selected.current.includes(it.id);
+      const touch = !!contactRef.current?.includes(it.id);
+      halo.visible = on || hot || touch;
+      const m = halo.material as THREE.MeshBasicMaterial;
+      m.color.set(touch ? '#ff9f1c' : '#8b6bd6');
+      m.opacity = touch ? 0.22 : on ? 0.16 : 0.08;
+    }
 
     // ---- report moving bodies to the store now and then, so saves keep them where they are ----
     const t = performance.now();
@@ -394,19 +439,29 @@ export function SandboxScene() {
         <group
           key={item.id}
           ref={(g) => {
-            if (g) {
-              if (!groups.current.has(item.id)) g.position.set(...item.pos), g.scale.setScalar(0.01); // bloom in from nothing
-              groups.current.set(item.id, g);
-            } else groups.current.delete(item.id);
+            // React calls this again on every re-render (null, then the same group): only the very first time
+            // is an object new, so only then does it start tiny and bloom in. Removed objects are dropped in syncSims.
+            if (!g) return;
+            if (!born.current.has(item.id)) {
+              born.current.add(item.id);
+              g.position.set(...item.pos);
+              g.scale.setScalar(0.01);
+            }
+            groups.current.set(item.id, g);
           }}
           userData={{ itemId: item.id }}
           onPointerDown={onDown(item)}
           onPointerOver={(e) => (e.stopPropagation(), (gl.domElement.style.cursor = 'grab'))}
           onPointerOut={() => (gl.domElement.style.cursor = '')}
         >
-          {isBody(item) ? <BodyShapeMesh shape={item.body!.shape} r={item.body!.radius} color={item.body!.color ?? (item.body!.charge ? (item.body!.charge > 0 ? '#e0473c' : '#3f7fd9') : undefined)} /> : item.molecule && <Molecule spec={item.molecule} />}
+          <group name="shape">
+            {isBody(item) ? <BodyShapeMesh shape={item.body!.shape} r={item.body!.radius} color={item.body!.color ?? (item.body!.charge ? (item.body!.charge > 0 ? '#e0473c' : '#3f7fd9') : undefined)} /> : item.molecule && <Molecule spec={item.molecule} />}
+          </group>
           {isBody(item) && <arrowHelper name="vel" args={[new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 0), 1, 0xff9f1c, 0.25, 0.16]} />}
-          <Halo r={radiusOf({ ...item, scale: 1 })} on={sandbox.selected.includes(item.id)} hot={hovered.includes(item.id)} touch={!!sandbox.contact?.includes(item.id)} />
+          <mesh name="halo" visible={false}>
+            <sphereGeometry args={[radiusOf({ ...item, scale: 1 }) + 0.15, 32, 20]} />
+            <meshBasicMaterial color="#8b6bd6" transparent opacity={0.1} depthWrite={false} />
+          </mesh>
           <Label
             text={isBody(item) && item.body!.charge ? `${item.name} (${item.body!.charge > 0 ? '+' : '−'})` : item.name}
             position={[0, radiusOf({ ...item, scale: 1 }) + 0.35, 0]}
@@ -421,15 +476,5 @@ export function SandboxScene() {
         </mesh>
       ))}
     </group>
-  );
-}
-
-function Halo({ r, on, hot, touch }: { r: number; on: boolean; hot: boolean; touch: boolean }) {
-  if (!on && !hot && !touch) return null;
-  return (
-    <mesh>
-      <sphereGeometry args={[r + 0.15, 32, 20]} />
-      <meshBasicMaterial color={touch ? '#ff9f1c' : '#8b6bd6'} transparent opacity={touch ? 0.22 : on ? 0.16 : 0.08} depthWrite={false} />
-    </mesh>
   );
 }

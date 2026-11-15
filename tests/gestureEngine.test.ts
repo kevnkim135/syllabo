@@ -314,3 +314,16 @@ test('a three-finger pinch zooms and never selects or drags', () => {
   assert.deepEqual(only(r.all, 'grab'), []);
   assert.ok(only(r.cmds, 'zoom').length > 5);
 });
+
+test('sandbox mode: pointing and pinching never zoom or twirl, and rotation names the holding hand', () => {
+  GESTURE.directManipulation = true;
+  try {
+    assert.deepEqual(only(run(() => [R({ gather: true })], 60).cmds, 'zoom'), [], 'no hold-zoom in the sandbox');
+    assert.deepEqual(only(run((i) => [R({ curl: POINT, at: twirl(i, 10) })], 100).cmds, 'newExample'), [], 'no twirl in the sandbox');
+    const r = run(circling('screen'), 80);
+    const rot = only(r.cmds, 'rotateAxis') as Extract<Command, { type: 'rotateAxis' }>[];
+    assert.ok(rot.length > 10 && rot.every((c) => c.hand === 'left'), 'the user\'s left hand is holding');
+  } finally {
+    GESTURE.directManipulation = false;
+  }
+});

@@ -7,7 +7,7 @@ Write every mathematical expression, formula and chemical equation in LaTeX betw
 Be concise: students read on screens, so prefer short sentences and few words.`;
 
 const SCHEMAS: Record<LessonKind, string> = {
-  timeline: `A JSON array of 10-16 events in chronological order covering the field's full history.
+  timeline: `A JSON array of 12-16 events in chronological order covering the field's full history, from its origins up to the present day (it is now 2026). Include at least 4 events from 2000 or later, the last one within the past few years (recent discoveries, technologies, prizes, open problems being solved), so the timeline does not stop in the past.
 Mix three types: "discovery" (a finding or invention), "event" (a historical event, publication, institution, war, experiment) and "figure" (a milestone in a prominent person's life or work). Always name the person when there is one. Include at least 3 of each type, so the timeline shows people and historical context, not only findings.
 [{"year": "1869", "type": "discovery", "title": "Periodic table", "figure": "Dmitri Mendeleev", "detail": "one sentence on the finding and why it mattered", "related": ["2-4 short related terms, people or ideas worth exploring next"]}]`,
 

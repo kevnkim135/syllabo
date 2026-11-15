@@ -107,6 +107,20 @@ export function SandboxPanel() {
               )}
             </div>
           )}
+          {sel.length > 0 && (
+            <div className="sb-size" role="group" aria-label="Size of the selection">
+              <span className="muted">Selected: {sel.length}</span>
+              <button className="chip" onClick={() => lesson.sandboxScale(sel, 1 / 1.2)} aria-label="Smaller">
+                −
+              </button>
+              <button className="chip" onClick={() => lesson.sandboxScale(sel, 1.2)} aria-label="Bigger">
+                +
+              </button>
+              <button className="chip" onClick={() => lesson.sandboxSetRot(Object.fromEntries(sel.map((id) => [id, [0, 0, 0, 1] as [number, number, number, number]])))}>
+                Reset turn
+              </button>
+            </div>
+          )}
           <button className="sb-clear" onClick={lesson.sandboxClear}>
             Clear the sandbox
           </button>
@@ -138,7 +152,7 @@ export function SandboxPanel() {
           <li>Say "add a car and a ball", "push the car right with 2000 newtons", "turn off friction", "make collisions elastic", or add a sun and a planet and push the planet sideways to make it orbit.</li>
         )}
         <li>Mouse: click to select, shift-click for several, drag to move; let go while moving to throw.</li>
-        <li>Hands: point and pinch quickly to add an object to your group; pinch and hold to carry it. Each hand can carry its own object, so you can bring two together.</li>
+        <li>Hands: point and pinch quickly to add an object to your group; pinch and hold to carry it (each hand can carry its own). To turn one, pinch it with one hand and draw circles with the other index finger.</li>
       </ul>
     </aside>
   );

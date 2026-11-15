@@ -119,3 +119,6 @@
 .sb-toggle input { accent-color: var(--violet); }
 .sb-switches { display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem 0.6rem; margin-bottom: 0.3rem; }
 .sb-switches .sb-toggle { font-size: 0.8rem; }
+.sb-size { display: flex; align-items: center; gap: 0.35rem; margin: 0.2rem 0 0.4rem; }
+.sb-size .muted { font-size: 0.8rem; margin-right: auto; }
+.sb-size .chip { padding: 0.15rem 0.6rem; }
