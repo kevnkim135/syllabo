@@ -76,6 +76,9 @@ export function ruleIntent(transcript: string, ctx: IntentContext = {}): IntentR
   const inBox = ctx.sandbox !== undefined || /\bsandbox\b/.test(t);
   if (/\b(?:open|show|go to|start|use)\b.*\bsandbox\b|^sandbox$/.test(t)) return r({ action: 'sandbox' }, 'Opening the sandbox');
   if (/\b(?:clear|empty|reset)\b.*\bsandbox\b|^clear (?:it|everything|all)$/.test(t)) return r({ action: 'sandboxClear' }, 'Cleared the sandbox');
+  if (/\b(?:new|another|fresh|second|extra)\s+sandbox\b/.test(t)) return r({ action: 'sandboxNew' }, 'New sandbox');
+  if (/\b(?:next|following)\s+sandbox\b/.test(t)) return r({ action: 'sandboxStep', step: 1 }, 'Next sandbox');
+  if (/\b(?:previous|last|prior|other)\s+sandbox\b|\bgo back a sandbox\b/.test(t)) return r({ action: 'sandboxStep', step: -1 }, 'Previous sandbox');
   const NUM: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
   const add = /^(?:add|put|place|drop|bring in|throw in|insert)\s+(?:(a|an|one|two|three|four|five|six|\d)\s+)?(?:molecules? of\s+)?(.+?)(?:\s+molecules?)?(?:\s+(?:to|into|in) (?:the )?sandbox)?$/.exec(t);
   if (add && (inBox || /\bsandbox\b/.test(t))) {
@@ -84,14 +87,15 @@ export function ruleIntent(transcript: string, ctx: IntentContext = {}): IntentR
     return r({ action: 'sandboxAdd', name, count }, `Adding ${count > 1 ? `${count} ` : ''}${name}`);
   }
   if (inBox) {
-    const react = /\b(?:react|mix|combine|heat|ignite|burn|spark|light)\b/.exec(t);
+    const react = !/\bauto(?:matic(?:ally)?)?[ -]?react/.test(t) && /\b(?:react|mix|combine|heat|ignite|burn|spark|light)\b/.exec(t); // "auto react" is the switch, below
     if (react) {
       const cond = /\b(?:with|using|under|add(?:ing)?|in)\s+(?:some\s+|a\s+|an\s+)?(heat|a spark|spark|fire|flame|light|water|(?:an? )?(?:\w+ )?catalyst|acid|base|pressure)\b/.exec(t)?.[1] ??
         (/\b(?:heat|ignite|burn|spark|light)\b/.test(t) ? 'heat' : undefined);
       return r({ action: 'sandboxReact', condition: cond }, cond ? `Reacting them with ${cond}` : 'Reacting them');
     }
     // physics switches: "turn off friction", "no air resistance", "make collisions elastic", "gravity on"
-    const SETTING: [RegExp, 'gravity' | 'friction' | 'air' | 'elastic'][] = [
+    const SETTING: [RegExp, 'gravity' | 'friction' | 'air' | 'elastic' | 'autoReact'][] = [
+      [/\bauto(?:matic(?:ally)?)?[ -]?react(?:ion|ions|ing)?\b/, 'autoReact'],
       [/\bgravity\b/, 'gravity'],
       [/\bfriction\b/, 'friction'],
       [/\bair(?: resistance| drag)?\b|\bdrag\b/, 'air'],
@@ -101,7 +105,7 @@ export function ruleIntent(transcript: string, ctx: IntentContext = {}): IntentR
     if (setting && /\b(?:turn|switch)\s+(?:on|off)\b|\b(?:on|off)$|\b(?:no|without|remove|disable|enable|add|with|make|stop|ignore)\b/.test(t)) {
       const inelastic = setting === 'elastic' && /\binelastic\b|\bnot elastic\b|\blose energy\b/.test(t);
       const on = inelastic ? false : !/\boff\b|\bno\b|\bwithout\b|\bremove\b|\bdisable\b|\bstop\b|\bignore\b/.test(t);
-      const name = { gravity: 'Gravity', friction: 'Friction', air: 'Air resistance', elastic: 'Elastic collisions' }[setting];
+      const name = { gravity: 'Gravity', friction: 'Friction', air: 'Air resistance', elastic: 'Elastic collisions', autoReact: 'Auto react' }[setting];
       return r({ action: 'sandboxSetting', setting, on }, `${name} ${on ? 'on' : 'off'}`);
     }
     const push = /^(?:push|shove|kick|throw|launch|fling|hit|roll)\s+(.+?)\s+(?:to the |towards? the |)?(left|right|up|down|closer|forward|away|back|together|apart)\b(?:.*?\b(\d+(?:\.\d+)?)\s*(?:n|newtons?)\b)?/.exec(t);

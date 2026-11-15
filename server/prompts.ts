@@ -140,8 +140,10 @@ Actions (pick exactly one):
 - {"action": "sandboxRemove", "target": "..."}
 - {"action": "sandboxReact", "condition": "..."}: make the sandbox molecules react, optionally under a condition ("heat", "a spark", "a platinum catalyst", "in water"); omit condition if none given.
 - {"action": "sandboxClear"}
+- {"action": "sandboxNew"}: start another, empty sandbox (the lesson can have several)
+- {"action": "sandboxStep", "step": 1 | -1}: next or previous sandbox
 - {"action": "sandboxPush", "target": "...", "direction": "left" | "right" | "up" | "down" | "closer" | "farther" | "together" | "apart", "force": 50}: shove or throw physical objects (cars, balls, crates, planets); force in newtons only if the student gives one.
-- {"action": "sandboxSetting", "setting": "gravity" | "friction" | "air" | "elastic", "on": true | false}: physics switches; "air" is air resistance, "elastic" makes collisions perfectly bouncy (no energy lost).
+- {"action": "sandboxSetting", "setting": "gravity" | "friction" | "air" | "elastic" | "autoReact", "on": true | false}: sandbox switches; "air" is air resistance, "elastic" makes collisions perfectly bouncy, "autoReact" makes molecules react by themselves when they touch.
 - {"action": "none"}: chit-chat, or nothing actionable.
 
 When the sandbox is open, "add X", "put X in", "move X left", "heat them up", "react these" refer to the sandbox. The sandbox holds both molecules and physical objects: use sandboxPush for pushing, kicking, throwing or launching objects, sandboxMove for simply placing them.

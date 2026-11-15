@@ -23,7 +23,8 @@ export type Command =
   // ---- direct manipulation (handled by the sandbox; ignored elsewhere) ----
   // `hand` is the user's own left / right hand: each hand has its own pointer, taps and drags
   | { type: 'pointer'; hand: Hand; x: number; y: number; visible: boolean } // fingertip as a screen pointer, 0..1 (x right, y down)
-  | { type: 'openHand'; hand: Hand } // that hand held open, all fingers out: let go of everything it picked
+  | { type: 'openHand'; hand: Hand } // that hand held open
+  | { type: 'openBoth' } // both hands held open together: deselect everything (sandbox)
   | { type: 'press'; hand: Hand } // fingers just closed into a pinch: select what that hand points at, right away
   | { type: 'tap'; hand: Hand } // the pinch opened again quickly without moving (a click): on empty space, clear the selection
   | { type: 'grab'; hand: Hand; phase: 'start' | 'move' | 'end'; dx: number; dy: number; dz: number } // pinch held: drag; dx, dy screen fractions, dz scene units toward the user

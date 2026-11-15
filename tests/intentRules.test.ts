@@ -66,4 +66,13 @@ test('physics sandbox: push with a force, gravity', () => {
   assert.deepEqual(act('turn friction back on', box), { action: 'sandboxSetting', setting: 'friction', on: true });
   assert.deepEqual(act('make the collisions elastic', box), { action: 'sandboxSetting', setting: 'elastic', on: true });
   assert.deepEqual(act('make collisions inelastic', box), { action: 'sandboxSetting', setting: 'elastic', on: false });
+  assert.deepEqual(act('turn on auto react', box), { action: 'sandboxSetting', setting: 'autoReact', on: true });
+  assert.deepEqual(act('turn off automatic reactions', box), { action: 'sandboxSetting', setting: 'autoReact', on: false });
+});
+
+test('several sandboxes: new, next, previous', () => {
+  const box: IntentContext = { subject: 'Momentum', sandbox: ['Car'] };
+  assert.deepEqual(act('make a new sandbox', box), { action: 'sandboxNew' });
+  assert.deepEqual(act('next sandbox', box), { action: 'sandboxStep', step: 1 });
+  assert.deepEqual(act('go back to the previous sandbox', box), { action: 'sandboxStep', step: -1 });
 });

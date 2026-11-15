@@ -10,10 +10,12 @@
 //   one hand pointing, fingertip draws a circle       -> newExample                  (mode "point")
 //   one hand pinches (clutch) + the other hand's fingertip draws circles -> rotateAxis (mode "rotate")
 //   both hands closed fists, held                     -> home                        (mode "fists")
-//   one hand pinching (thumb + index), quick          -> tap: select what the pointer is on   (mode "grab")
-//   one hand pinching, held                           -> grab: drag the selection, in depth too (mode "grab")
-//   both hands pinching, spread / close               -> scale the selection         (mode "scale")
-// Whenever one hand points or pinches, its fingertip is also emitted as a screen pointer.
+// In the sandbox only (GESTURE.directManipulation):
+//   point at an object, then close the hand into a FIST -> select it and carry it while the fist stays closed
+//   open the hand                                       -> let go
+//   one open hand, hard swipe left / right              -> next / previous sandbox
+//   both hands open, held                               -> deselect everything
+//   a fist holding an object + the other index circling -> turn that object
 // Zoom is a HOLD, not a motion: holding the pose zooms at a rate that builds up, and relaxing the hand
 // stops it, so there is no return stroke that undoes the zoom. Moving the hand pauses zoom.
 // Rotate: the model spins about the axis normal to the plane the fingertip circles in, snapped to the
@@ -109,7 +111,9 @@ export const GESTURE = {
   grabGain: 1.6, // side-to-side and up-down reach: the selection moves this much farther than the hand on screen
   grabDepthEngage: 0.03, // metres the hand must move in depth before depth starts to follow (then it follows)
   openHoldFrames: 8, // an open hand held this many frames (about 0.25 s) deselects what that hand picked (sandbox)
-  aimLookbackMs: 160, // at a pinch, aim where the fingertip pointed this long before (before the fingers began closing)
+  aimLookbackMs: 220, // at a fist, aim where the fingertip pointed this long before (before the hand began closing)
+  closedFingers: 0.68, // all four fingers bent past this (straightness below it) = a closed hand that selects and carries
+  openFingers: 0.78, // mean finger straightness above this = an open hand (let go; both open = deselect all)
   releaseFrames: 5, // a held object is let go only after the fingers are clearly apart this many frames in a row
   releaseRatio: 0.6, // thumb-to-index gap (hand sizes) that counts as clearly apart; anything tighter keeps holding
   lostHoldFrames: 45, // a hand that leaves the camera's view keeps holding for this many frames (about 1.5 s)
@@ -234,6 +238,7 @@ export function createGestureInterpreter(emit: (cmd: Command) => void = commands
   const aimLock: Partial<Record<Hand, { x: number; y: number; base: { x: number; y: number } }>> = {};
   const pressPending = new Set<Hand>();
   const openFrames: Partial<Record<Hand, number>> = {};
+  let bothOpen = 0; // frames with both hands open at the same time
   let scaleSpan: number | null = null;
   let flash: { label: GestureLabel; until: number } | null = null;
 
@@ -279,12 +284,12 @@ export function createGestureInterpreter(emit: (cmd: Command) => void = commands
       if (pose === 'point') return G.directManipulation ? 'none' : 'point'; // no twirl in the sandbox
       if (pose === 'gather') return G.directManipulation ? 'none' : 'gather'; // no hold-zoom in the sandbox
       if (pose === 'spread') return G.directManipulation ? 'none' : 'spread';
-      if (pose === 'open') return G.directManipulation ? 'none' : 'hand'; // no model swipes in the sandbox
-      if (pose === 'pinch') return G.directManipulation ? 'grab' : 'none'; // selecting and carrying are sandbox-only
+      if (pose === 'open') return 'hand'; // swipes: models, or sandboxes while the sandbox is shown
+      if (pose === 'pinch' || pose === 'fist') return G.directManipulation ? 'grab' : 'none'; // selecting and carrying are sandbox-only
       return 'none';
     }
     if (seen.length === 2) {
-      if (seen.every((h) => h.pose === 'fist')) return 'fists';
+      if (seen.every((h) => h.pose === 'fist')) return G.directManipulation ? 'none' : 'fists'; // in the sandbox two fists carry two things
       if (mode !== 'rotate' && !G.directManipulation && seen.every((h) => h.shape.pinching)) return 'scale';
       const clutch = pickClutch(seen);
       if (!clutch) return 'none';
@@ -299,15 +304,21 @@ export function createGestureInterpreter(emit: (cmd: Command) => void = commands
 
   /** The pinching hand of a pair. If both pinch, keep the current clutch, else prefer the user's left. */
   function pickClutch(seen: Seen[]): Seen | undefined {
-    const pinching = seen.filter((h) => h.shape.pinching); // a three-finger pinch also grips
+    const pinching = seen.filter((h) => h.shape.pinching || (G.directManipulation && closedHand(h))); // a fist holding something grips too
     if (pinching.length === 1) return pinching[0];
     if (pinching.length === 2) return pinching.find((h) => h.side === (clutchSide ?? 'left')) ?? pinching[0];
     return undefined;
   }
 
   /** Where the hand points on screen: the index tip, or between thumb and index when pinching. Mirrored like the preview. */
+  /** A closed hand: all four fingers curled (whatever the thumb does). Very reliable to detect. */
+  const closedHand = (h: Seen) => h.shape.straight.every((s) => s < G.closedFingers);
+  const openedHand = (h: Seen) => h.shape.straight.reduce((a, b) => a + b, 0) / 4 > G.openFingers;
   const screenPoint = (h: Seen) => {
-    const p = h.shape.pinching ? { x: (h.image[4].x + h.image[8].x) / 2, y: (h.image[4].y + h.image[8].y) / 2 } : h.image[8];
+    // a closed hand moves with its knuckles (stable while the fingers curl); otherwise the fingertip or pinch point
+    const p = closedHand(h)
+      ? { x: [5, 9, 13, 17].reduce((a, q) => a + h.image[q].x, 0) / 4, y: [5, 9, 13, 17].reduce((a, q) => a + h.image[q].y, 0) / 4 }
+      : h.shape.pinching ? { x: (h.image[4].x + h.image[8].x) / 2, y: (h.image[4].y + h.image[8].y) / 2 } : h.image[8];
     return { x: 1 - p.x, y: p.y };
   };
 
@@ -332,10 +343,9 @@ export function createGestureInterpreter(emit: (cmd: Command) => void = commands
       const t = tracks[side];
       // Starting a pinch needs a clean two-finger pinch. Once something is held, ANY thumb-to-index contact
       // keeps holding it (the middle finger drifting close, or starting the rotate gesture, does not drop it).
-      const pinch = t?.dragging
-        ? h.shape.pinch < G.releaseRatio // holding: only clearly open fingers let go (motion blur and odd poses do not)
-        : (mode !== 'rotate' || G.directManipulation) &&
-          (h.pose === 'pinch' || (G.directManipulation && h.pose === 'gather') || (mode === 'scale' && h.shape.pinching && h.pose !== 'gather'));
+      // A closed fist selects and carries; it keeps carrying until the hand clearly opens (a blurry or
+      // half-curled frame does not drop anything).
+      const pinch = t ? h.shape.straight.every((s) => s < G.closedFingers + 0.1) && !openedHand(h) : closedHand(h); // looser while holding
       const sp = screenPoint(h);
       const z = h.depth * G.grabDepthGain; // the palm, so curling into a pinch is not depth (smoothed below)
       if (mode === 'rotate' && t && !t.dragging && !G.directManipulation) {
@@ -395,11 +405,15 @@ export function createGestureInterpreter(emit: (cmd: Command) => void = commands
       }
       if (pressPending.delete(side)) emit({ type: 'press', hand: side });
       // an open hand, held, in the sandbox: once per opening
-      if (G.directManipulation && h.pose === 'open' && !tracks[side]) {
+      if (G.directManipulation && openedHand(h) && !tracks[side]) {
         openFrames[side] = (openFrames[side] ?? 0) + 1;
         if (openFrames[side] === G.openHoldFrames) emit({ type: 'openHand', hand: side });
       } else openFrames[side] = 0;
     }
+    // both hands open at the same time (forgiving: relaxed open hands count), held: once per opening
+    if (seen.length === 2 && seen.every((h) => openedHand(h)) && !tracks.left && !tracks.right) {
+      if (++bothOpen === G.openHoldFrames) emit({ type: 'openBoth' });
+    } else bothOpen = 0;
     for (const side of ['left', 'right'] as Hand[]) {
       if (present.has(side)) continue;
       const t = tracks[side];

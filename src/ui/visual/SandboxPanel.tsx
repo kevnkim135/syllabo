@@ -9,7 +9,6 @@ const PHYS = ['car', 'ball', 'crate', 'cart', 'sun', 'planet', 'proton', 'electr
 export function SandboxPanel() {
   const { sandbox, subject, focus } = useLesson();
   const [name, setName] = useState('');
-  const [condition, setCondition] = useState('');
   const items = sandbox.items.filter((i) => !i.dying);
   const sel = sandbox.selected;
   const molecules = items.filter((i) => i.kind !== 'body');
@@ -25,7 +24,7 @@ export function SandboxPanel() {
   };
   const react = (e: FormEvent) => {
     e.preventDefault();
-    lesson.sandboxReact(condition);
+    lesson.sandboxReact(sandbox.condition);
   };
 
   return (
@@ -52,7 +51,7 @@ export function SandboxPanel() {
           <p>
             <strong>{contact.join(' + ')}</strong> are touching.
           </p>
-          <button className="primary" onClick={() => lesson.sandboxReact(condition)}>
+          <button className="primary" onClick={() => lesson.sandboxReact(sandbox.condition)}>
             React them
           </button>
           <span className="muted">or tap one with a pinch</span>
@@ -77,10 +76,13 @@ export function SandboxPanel() {
 
           {!!molecules.length && (
             <form className="sb-react" onSubmit={react}>
-              <input value={condition} onChange={(e) => setCondition(e.target.value)} placeholder="Condition: heat, a spark, catalyst…" aria-label="Reaction condition" />
+              <input value={sandbox.condition} onChange={(e) => lesson.sandboxCondition(e.target.value)} placeholder="Condition: heat, a spark, catalyst…" aria-label="Reaction condition" />
               <button type="submit" className="primary" disabled={sandbox.busy === 'react'}>
                 {sandbox.busy === 'react' ? 'Reacting…' : sel.length >= 2 ? `React the ${sel.length} selected` : 'React the molecules'}
               </button>
+              <label className="sb-toggle">
+                <input type="checkbox" checked={sandbox.autoReact} onChange={(e) => lesson.sandboxSetting('autoReact', e.target.checked)} /> Auto react when molecules touch
+              </label>
             </form>
           )}
 
@@ -152,7 +154,7 @@ export function SandboxPanel() {
           <li>Say "add a car and a ball", "push the car right with 2000 newtons", "turn off friction", "make collisions elastic", or add a sun and a planet and push the planet sideways to make it orbit.</li>
         )}
         <li>Mouse: click to select, shift-click for several, drag to move; let go while moving to throw.</li>
-        <li>Hands: point and pinch quickly to add an object to your group; pinch and hold to carry it (each hand can carry its own). To turn one, pinch it with one hand and draw circles with the other index finger. Show an open hand to let go of everything that hand picked (both hands: everything).</li>
+        <li>Hands: point at an object, then close your hand into a fist to select and carry it; open your hand to let go. Each hand can carry its own. Hold with a fist and circle with the other index finger to turn it. One open hand swiped left / right switches sandboxes; both hands open deselects everything.</li>
       </ul>
     </aside>
   );

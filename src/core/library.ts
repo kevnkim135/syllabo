@@ -40,7 +40,9 @@ export interface SavedLesson {
   explored: string[];
   solved: Problem[];
   folderId: string | null;
-  sandbox?: { items: SandboxItem[]; reaction: SandboxReaction | null; gravity?: boolean; friction?: boolean; air?: boolean; elastic?: boolean };
+  sandbox?: { items: SandboxItem[]; reaction: SandboxReaction | null; gravity?: boolean; friction?: boolean; air?: boolean; elastic?: boolean; autoReact?: boolean; condition?: string };
+  sandboxes?: NonNullable<SavedLesson['sandbox']>[];
+  sandboxIndex?: number;
   createdAt: number;
   updatedAt: number;
 }

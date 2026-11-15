@@ -202,6 +202,8 @@ export type VoiceIntent =
   | { action: 'sandboxRemove'; target: string }
   | { action: 'sandboxReact'; condition?: string }
   | { action: 'sandboxClear' }
+  | { action: 'sandboxNew' }
+  | { action: 'sandboxStep'; step: 1 | -1 }
   | { action: 'sandboxPush'; target: string; direction: 'left' | 'right' | 'up' | 'down' | 'closer' | 'farther' | 'together' | 'apart'; force?: number } // shove bodies (newtons optional)
   | { action: 'sandboxSetting'; setting: SandboxSetting; on: boolean } // physics switches
   | { action: 'none' };
@@ -255,5 +257,5 @@ export interface SandboxBody {
 export type SandboxItemSpec = { kind: 'molecule'; name: string; molecule: MoleculeSpec } | { kind: 'body'; name: string; body: SandboxBody };
 
 /** Physics switches in the sandbox. */
-export const SANDBOX_SETTINGS = ['gravity', 'friction', 'air', 'elastic'] as const;
+export const SANDBOX_SETTINGS = ['gravity', 'friction', 'air', 'elastic', 'autoReact'] as const;
 export type SandboxSetting = (typeof SANDBOX_SETTINGS)[number];

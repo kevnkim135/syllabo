@@ -184,7 +184,8 @@ export function validateIntent(raw: unknown): IntentResult | undefined {
     case 'goto': intent = LESSON_KINDS.includes(i.section as LessonKind) ? { action: 'goto', section: i.section as LessonKind } : undefined; break;
     case 'modelStep': intent = { action: 'modelStep', step: i.step === -1 ? -1 : 1 }; break;
     case 'save': intent = { action: 'save', folder: s(i.folder) }; break;
-    case 'widen': case 'newExample': case 'library': case 'home': case 'none': case 'sandbox': case 'sandboxClear': intent = { action: i.action }; break;
+    case 'widen': case 'newExample': case 'library': case 'home': case 'none': case 'sandbox': case 'sandboxClear': case 'sandboxNew': intent = { action: i.action }; break;
+    case 'sandboxStep': intent = { action: 'sandboxStep', step: i.step === -1 ? -1 : 1 }; break;
     case 'sandboxAdd': intent = s(i.name) ? { action: 'sandboxAdd', name: s(i.name)!, count: num(i.count) && i.count >= 1 && i.count <= 6 ? Math.round(i.count) : undefined } : undefined; break;
     case 'sandboxRemove': intent = s(i.target) ? { action: 'sandboxRemove', target: s(i.target)! } : undefined; break;
     case 'sandboxReact': intent = { action: 'sandboxReact', condition: s(i.condition) }; break;

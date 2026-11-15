@@ -14,10 +14,11 @@ import { ModelLayers } from './ModelLayers';
 import { SandboxPanel } from './SandboxPanel';
 import { AnatomyPanel } from './anatomy/AnatomyPanel';
 import { SandboxScene } from './SandboxScene';
+import { SandboxGallery } from './SandboxGallery';
 
 /** The 3D stage. It stays mounted for the whole lesson; `paused` stops rendering and input while hidden. */
 export function VisualStage({ spec, paused = false }: { spec: VisualSpec | null; paused?: boolean }) {
-  const { loading, visualRequest, stageMode, sandbox } = useLesson();
+  const { loading, visualRequest, stageMode, sandbox, sandboxIndex } = useLesson();
   const box = stageMode === 'sandbox';
   const busy = box ? !!sandbox.busy : !!loading.visual;
   const orient = useRef<THREE.Group>(null);
@@ -45,7 +46,7 @@ export function VisualStage({ spec, paused = false }: { spec: VisualSpec | null;
           <directionalLight position={[-6, -2, -4]} intensity={0.35} />
           <Environment scene={scene} ground={!box && spec?.kind === 'diagram' ? (spec.ground ?? -2.6) : -2.6} size={box ? 32 : 26} />
           {box ? (
-            <SandboxScene />
+            <SandboxScene key={sandboxIndex} />
           ) : (
             <group ref={orient}>{spec && <ModelLayers spec={spec} />}</group>
           )}
@@ -69,7 +70,7 @@ export function VisualStage({ spec, paused = false }: { spec: VisualSpec | null;
             {box ? (sandbox.busy === 'react' ? 'Running the reaction…' : 'Building the molecule…') : visualRequest ? `Building ${visualRequest}…` : 'Building a new model…'}
           </div>
         )}
-        {!box && <ModelGallery />}
+        {box ? <SandboxGallery /> : <ModelGallery />}
         <ControlBar busy={busy && !box} />
         {!box && <AskModel busy={busy} />}
       </div>

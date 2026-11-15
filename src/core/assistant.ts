@@ -120,6 +120,12 @@ export function perform({ intent }: IntentResult): boolean {
     case 'sandboxSetting':
       lesson.sandboxSetting(intent.setting, intent.on);
       return inLesson;
+    case 'sandboxNew':
+      lesson.sandboxNew();
+      return inLesson;
+    case 'sandboxStep':
+      lesson.sandboxStep(intent.step);
+      return inLesson;
     case 'sandboxClear':
       lesson.sandboxClear();
       return inLesson;

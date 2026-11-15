@@ -35,7 +35,9 @@ export interface LessonState {
   solved: Problem[]; // the student's own problems, newest first
   asked: { id: number; question: string } | null; // pending spoken/typed problem for the problems section
   stageMode: 'models' | 'sandbox'; // the model gallery, or the chemistry sandbox
-  sandbox: Sandbox;
+  sandbox: Sandbox; // the sandbox on screen
+  sandboxes: Sandbox[]; // all of this lesson's sandboxes (the one on screen is kept in `sandbox` while active)
+  sandboxIndex: number;
   savedAt: number | null; // set once saved; later changes are saved automatically
   folderId: string | null;
   createdAt: number;
@@ -51,12 +53,14 @@ export interface Sandbox {
   friction: boolean; // rolling friction on the floor
   air: boolean; // air resistance (never in space)
   elastic: boolean; // perfectly elastic collisions: no kinetic energy lost
+  autoReact: boolean; // molecules react by themselves when they touch
+  condition: string; // reaction condition (heat, a spark...), used by the React button and by auto react
   contact: string[] | null; // molecules that are touching: the panel offers to react them
   event: string | null; // last collision, explained (momentum and energy before / after)
 }
 export type MoveDirection = 'left' | 'right' | 'up' | 'down' | 'closer' | 'farther' | 'together' | 'apart';
 
-const emptySandbox = (): Sandbox => ({ items: [], selected: [], reaction: null, busy: null, error: null, gravity: true, friction: true, air: true, elastic: false, contact: null, event: null });
+const emptySandbox = (): Sandbox => ({ items: [], selected: [], reaction: null, busy: null, error: null, gravity: true, friction: true, air: true, elastic: false, autoReact: false, condition: '', contact: null, event: null });
 
 export interface Workspace {
   view: View;
@@ -86,6 +90,8 @@ const blank = (level: string): LessonState => ({
   asked: null,
   stageMode: 'models',
   sandbox: emptySandbox(),
+  sandboxes: [emptySandbox()],
+  sandboxIndex: 0,
   savedAt: null,
   folderId: null,
   createdAt: 0,
@@ -138,7 +144,9 @@ function snapshot(s: LessonState): SavedLesson {
     explored: s.explored,
     solved: s.solved,
     folderId: s.folderId,
-    sandbox: { items: s.sandbox.items.filter((i) => !i.dying).map(({ dying: _d, ...i }) => i), reaction: s.sandbox.reaction, gravity: s.sandbox.gravity, friction: s.sandbox.friction, air: s.sandbox.air, elastic: s.sandbox.elastic },
+    sandbox: shelfOf(s.sandbox),
+    sandboxes: s.sandboxes.map((b, i) => shelfOf(i === s.sandboxIndex ? s.sandbox : b)),
+    sandboxIndex: s.sandboxIndex,
     createdAt: s.createdAt,
     updatedAt: Date.now(),
   };
@@ -328,7 +336,11 @@ export const lesson = {
       data: { ...saved.data, ...(models.length ? { visual: models[modelIndex] } : {}) },
       models,
       modelIndex,
-      sandbox: { ...emptySandbox(), items: saved.sandbox?.items ?? [], reaction: saved.sandbox?.reaction ?? null, gravity: saved.sandbox?.gravity ?? true, friction: saved.sandbox?.friction ?? true, air: saved.sandbox?.air ?? true, elastic: saved.sandbox?.elastic ?? false },
+      ...(() => {
+        const shelf = (saved.sandboxes?.length ? saved.sandboxes : [saved.sandbox ?? {}]).map(fromShelf);
+        const idx = Math.min(saved.sandboxIndex ?? 0, shelf.length - 1);
+        return { sandboxes: shelf, sandboxIndex: idx, sandbox: shelf[idx] };
+      })(),
       savedAt: saved.updatedAt,
     });
     order = [...order, id];
@@ -454,7 +466,17 @@ export const lesson = {
     withActive((s) => {
       const same = (s.sandbox.contact ?? []).join() === (ids ?? []).join();
       if (!same) update(s.id, { sandbox: { ...s.sandbox, contact: ids && ids.length ? ids : null } });
+      // auto react: each new group of touching molecules is tried once (not again while it stays touching)
+      const key = (ids ?? []).slice().sort().join();
+      if (s.sandbox.autoReact && ids && ids.length >= 2 && !s.sandbox.busy && autoTried.get(s.id) !== key && Date.now() > (autoQuiet.get(s.id) ?? 0)) {
+        autoTried.set(s.id, key);
+        lesson.sandboxReact(s.sandbox.condition);
+      }
+      if (!ids) autoTried.delete(s.id);
     });
+  },
+  sandboxCondition(condition: string) {
+    withActive((s) => update(s.id, { sandbox: { ...s.sandbox, condition } }));
   },
   sandboxEvent(text: string | null) {
     withActive((s) => update(s.id, { sandbox: { ...s.sandbox, event: text } }));
@@ -514,7 +536,34 @@ export const lesson = {
     );
   },
   sandboxClear() {
-    withActive((s) => update(s.id, { sandbox: emptySandbox() }));
+    withActive((s) => update(s.id, { sandbox: { ...emptySandbox(), gravity: s.sandbox.gravity, friction: s.sandbox.friction, air: s.sandbox.air, elastic: s.sandbox.elastic, autoReact: s.sandbox.autoReact, condition: s.sandbox.condition } }));
+  },
+  /** A fresh, empty sandbox after the others (swipe or the arrows to go back). */
+  sandboxNew() {
+    withActive((s) => {
+      const shelf = [...s.sandboxes];
+      shelf[s.sandboxIndex] = s.sandbox;
+      shelf.push(emptySandbox());
+      ws = { ...ws, view: 'lesson' };
+      update(s.id, { sandboxes: shelf, sandboxIndex: shelf.length - 1, sandbox: shelf[shelf.length - 1], stageMode: 'sandbox', section: 'visual' });
+    });
+  },
+  sandboxGo(index: number) {
+    withActive((s) => {
+      const shelf = [...s.sandboxes];
+      shelf[s.sandboxIndex] = s.sandbox;
+      const i = ((index % shelf.length) + shelf.length) % shelf.length;
+      update(s.id, { sandboxes: shelf, sandboxIndex: i, sandbox: { ...shelf[i], selected: [], contact: null } });
+    });
+  },
+  sandboxStep: (d: number) => withActive((s) => lesson.sandboxGo(s.sandboxIndex + d)),
+  sandboxDelete() {
+    withActive((s) => {
+      if (s.sandboxes.length <= 1) return lesson.sandboxClear();
+      const shelf = s.sandboxes.filter((_, i) => i !== s.sandboxIndex);
+      const i = Math.min(s.sandboxIndex, shelf.length - 1);
+      update(s.id, { sandboxes: shelf, sandboxIndex: i, sandbox: shelf[i] });
+    });
   },
   /**
    * Ask what happens when the selected molecules (or all of them) meet under a condition. If they react,
@@ -539,6 +588,7 @@ export const lesson = {
           const meet = centroid(chosen.map((i) => i.pos));
           const gone = new Set(chosen.map((i) => i.id));
           update(id, (x) => ({ sandbox: { ...x.sandbox, busy: null, reaction, selected: [], contact: null, items: x.sandbox.items.map((i) => (gone.has(i.id) ? { ...i, dying: meet } : i)) } }));
+          autoQuiet.set(id, Date.now() + 2500);
           setTimeout(() => {
             update(id, (x) => {
               const items = x.sandbox.items.filter((i) => !gone.has(i.id));
@@ -547,7 +597,7 @@ export const lesson = {
               for (const p of result.products) {
                 for (let c = 0; c < p.count; c++, k++) {
                   const a = (k / Math.max(total, 1)) * Math.PI * 2;
-                  const r = total > 1 ? 2.6 + total * 0.4 : 0; // products fan out around where the reactants met
+                  const r = total > 1 ? 3.2 + total * 0.9 : 0; // products fan out around where they formed, far enough apart not to touch
                   const item = { id: newId(), name: p.name, kind: 'molecule' as const, molecule: p.molecule, pos: clampPos([meet[0] + Math.cos(a) * r, meet[1] + Math.sin(a) * r * 0.35, meet[2] + Math.sin(a) * r * 0.9]), scale: 1 };
                   items.push(item);
                 }
@@ -607,6 +657,18 @@ function refillExamples(id: string, showFirst = false) {
 }
 
 // ---- sandbox helpers ----
+const autoTried = new Map<string, string>(); // lesson id -> the touching group auto react last tried
+const autoQuiet = new Map<string, number>(); // lesson id -> no auto react before this time (just reacted)
+type Shelved = NonNullable<SavedLesson['sandbox']>;
+const shelfOf = (b: Sandbox): Shelved => ({
+  items: b.items.filter((i) => !i.dying).map(({ dying: _d, ...i }) => i),
+  reaction: b.reaction, gravity: b.gravity, friction: b.friction, air: b.air, elastic: b.elastic, autoReact: b.autoReact, condition: b.condition,
+});
+const fromShelf = (b: Partial<Shelved>): Sandbox => ({
+  ...emptySandbox(), items: b.items ?? [], reaction: b.reaction ?? null,
+  gravity: b.gravity ?? true, friction: b.friction ?? true, air: b.air ?? true, elastic: b.elastic ?? false,
+  autoReact: b.autoReact ?? false, condition: b.condition ?? '',
+});
 export const isCelestial = (shape?: string) => shape === 'sun' || shape === 'planet' || shape === 'moon' || shape === 'satellite';
 const centroid = (ps: [number, number, number][]): [number, number, number] =>
   ps.length ? [0, 1, 2].map((k) => ps.reduce((a, p) => a + p[k], 0) / ps.length) as [number, number, number] : [0, 0, 0];
@@ -620,9 +682,9 @@ const tidyName = (title: string, asked: string) => {
 function freeSlot(items: { pos: [number, number, number] }[]): [number, number, number] {
   for (let k = 0; k < 60; k++) {
     const a = k * 2.4;
-    const r = k === 0 ? 0 : 1.6 + Math.sqrt(k) * 1.6;
-    const p: [number, number, number] = [Math.cos(a) * r, 0, Math.sin(a) * r * 0.6];
-    if (items.every((i) => Math.hypot(i.pos[0] - p[0], i.pos[2] - p[2]) > 2.6)) return p;
+    const r = k === 0 ? 0 : 3 + Math.sqrt(k) * 2.4;
+    const p: [number, number, number] = [Math.cos(a) * r, 0, Math.sin(a) * r * 0.8];
+    if (items.every((i) => Math.hypot(i.pos[0] - p[0], i.pos[2] - p[2]) > 5.2)) return p; // far apart: nothing touches (or auto-reacts) on arrival
   }
   return [0, 2, 0];
 }
@@ -643,7 +705,7 @@ commands.on((cmd) => {
     case 'newExample':
       return lesson.newExample();
     case 'modelStep':
-      return lesson.stepModel(cmd.step);
+      return s.stageMode === 'sandbox' && s.section === 'visual' ? lesson.sandboxStep(cmd.step) : lesson.stepModel(cmd.step);
     case 'generate':
       return lesson.requestVisual(cmd.request);
     case 'solve':

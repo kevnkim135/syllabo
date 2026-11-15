@@ -202,6 +202,10 @@ export function SandboxScene() {
             lesson.sandboxSelect([id], 'add');
           }
           if (id) (owned.current.get(cmd.hand) ?? owned.current.set(cmd.hand, new Set()).get(cmd.hand)!).add(id);
+        } else if (cmd.type === 'openBoth') {
+          owned.current.clear();
+          selected.current = [];
+          lesson.sandboxSelect([], 'set');
         } else if (cmd.type === 'openHand') {
           // an open hand lets go of everything it picked; both hands open (within half a second) clears it all
           const now = performance.now();
@@ -213,12 +217,7 @@ export function SandboxScene() {
             lesson.sandboxSelect([], 'set');
             return;
           }
-          const mine = [...(owned.current.get(cmd.hand) ?? [])].filter((x) => selected.current.includes(x));
-          owned.current.delete(cmd.hand);
-          if (mine.length) {
-            selected.current = selected.current.filter((x) => !mine.includes(x));
-            lesson.sandboxSelect(mine, 'remove');
-          }
+          // one open hand alone is for swiping between sandboxes: it does not deselect
         } else if (cmd.type === 'tap') {
           const p = pressed.current.get(cmd.hand);
           const id = p?.id ?? hover.current.get(cmd.hand) ?? null;
