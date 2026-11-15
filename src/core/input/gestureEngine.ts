@@ -23,7 +23,7 @@
 // A mode starts only after its pose has been seen for `enterFrames` frames in a row, ends after
 // `exitFrames` frames without it, and always passes through "none" before another mode can start.
 // Commands are emitted only on frames where the live pose still matches the active mode.
-import { commands, type Command } from '../commands';
+import { commands, type Command, type Hand } from '../commands';
 import {
   assignSides,
   classifyHand,
@@ -72,12 +72,12 @@ export const GESTURE = {
   zoomMaxFrameMs: 100, // longest frame gap used for one zoom step (a stalled camera must not jump)
 
   // Twirl (one hand pointing, fingertip traces a circle)
-  twirlWindowMs: 1600, // the circle must be completed within this
-  twirlMinWinding: 5.6, // radians, about 320 degrees
-  twirlMinRadius: 0.15, // circle radius in hand sizes (wrist to middle knuckle, as seen in the image)
-  twirlMinRoundness: 0.6, // 1 = perfect circle
-  twirlMinFill: 0.5, // swept area / circle area; rejects lines and wags
-  twirlCooldownMs: 1500,
+  twirlWindowMs: 1800, // the circle must be completed within this
+  twirlMinWinding: 4.7, // radians, about 270 degrees: most of a circle is enough
+  twirlMinRadius: 0.1, // circle radius in hand sizes (wrist to middle knuckle, as seen in the image)
+  twirlMinRoundness: 0.45, // 1 = perfect circle; hand-drawn circles are wobbly
+  twirlMinFill: 0.35, // swept area / circle area; still rejects lines and wags
+  twirlCooldownMs: 1200,
 
   // Rotate (one hand pinches as a clutch, the other hand's fingertip draws circles)
   rotateEnterStraight: 0.72, // steering index finger straightness needed to START rotating (1 = straight)
@@ -101,7 +101,9 @@ export const GESTURE = {
   // Direct manipulation (point, tap, grab)
   tapMs: 320, // a pinch released sooner than this is a tap; held longer it becomes a grab
   tapMaxMove: 0.04, // screen fraction the pinch may drift and still count as a tap
-  grabDepthGain: 6, // scene units of depth per metre the hand moves toward / away from the camera
+  grabDepthGain: 3, // scene units of depth per metre the hand moves toward / away from the camera
+  grabDepthSmoothing: 0.2, // 0..1 per frame; depth from a single camera is noisy, so it is heavily smoothed
+  grabDepthDeadZone: 0.012, // scene units per frame ignored, so depth only moves on purpose
   scaleDeadZone: 0.01,
 
   flashMs: 700, // how long an event label ("next model", "home", ...) stays on screen
@@ -203,9 +205,11 @@ export function createGestureInterpreter(emit: (cmd: Command) => void = commands
   let rotAxis: number | null = null; // snapped axis index while rotating
   let homeFired = false;
   // direct manipulation
-  let grab: { since: number; start: { x: number; y: number }; last: { x: number; y: number; z: number }; dragging: boolean } | null = null;
+  // per hand: pinch-to-tap / pinch-and-hold-to-drag, and whether its pointer is showing
+  type Track = { down: number; start: { x: number; y: number }; last: { x: number; y: number }; z: number; dragging: boolean };
+  const tracks: Partial<Record<Hand, Track>> = {};
+  const pointerShown: Partial<Record<Hand, boolean>> = {};
   let scaleSpan: number | null = null;
-  let pointerShown = false;
   let flash: { label: GestureLabel; until: number } | null = null;
 
   const fire = (cmd: Command, label: GestureLabel, now: number) => {
@@ -277,37 +281,66 @@ export function createGestureInterpreter(emit: (cmd: Command) => void = commands
     return { x: 1 - p.x, y: p.y };
   };
 
-  /** Called when a mode ends: a short pinch was a tap, a held one ends its drag. */
-  function endMode(prev: Mode, now: number) {
-    if (prev === 'grab' && grab) {
-      if (grab.dragging) emit({ type: 'grab', phase: 'end', dx: 0, dy: 0, dz: 0 });
-      else if (now - grab.since < G.tapMs + G.exitFrames * 40 && Math.hypot(grab.last.x - grab.start.x, grab.last.y - grab.start.y) < G.tapMaxMove) {
-        fire({ type: 'tap' }, 'grab', now);
-      }
-    }
-    grab = null;
+  function endMode(_prev: Mode, _now: number) {
     scaleSpan = null;
   }
 
-  /** One hand pinching: becomes a drag once held past `tapMs`. */
-  function actGrab(h: Seen, now: number) {
-    const sp = screenPoint(h);
-    const z = tipPosition(h.image, h.world, G.aspect, G.focal)[2];
-    if (!grab || !acted) {
-      grab = { since: modeSince || now, start: sp, last: { ...sp, z }, dragging: false };
-      return;
+  /**
+   * Each hand on its own: a quick two-finger pinch is a tap, a held one drags (both hands can drag at once).
+   * The three-finger zoom pinch never counts. Depth (toward / away from the camera) is smoothed hard.
+   */
+  function trackHands(seen: Seen[], now: number) {
+    const present = new Set<Hand>();
+    for (const h of seen) {
+      const side = h.side as Hand;
+      present.add(side);
+      const pinch = mode !== 'rotate' && (h.pose === 'pinch' || (mode === 'scale' && h.shape.pinching && h.pose !== 'gather'));
+      const sp = screenPoint(h);
+      const z = tipPosition(h.image, h.world, G.aspect, G.focal)[2] * G.grabDepthGain;
+      const t = tracks[side];
+      if (mode === 'rotate' && t) {
+        // this pinch turned out to be the rotate clutch: it was never a tap or a drag
+        if (t.dragging) emit({ type: 'grab', hand: side, phase: 'end', dx: 0, dy: 0, dz: 0 });
+        delete tracks[side];
+      } else if (pinch && !t) {
+        tracks[side] = { down: now, start: sp, last: sp, z, dragging: false };
+      } else if (pinch && t) {
+        if (!t.dragging && now - t.down >= G.tapMs) {
+          t.dragging = true;
+          emit({ type: 'grab', hand: side, phase: 'start', dx: 0, dy: 0, dz: 0 });
+        }
+        const zs = t.z + (z - t.z) * G.grabDepthSmoothing;
+        if (t.dragging) {
+          const dx = sp.x - t.last.x;
+          const dy = sp.y - t.last.y;
+          let dz = zs - t.z;
+          if (Math.abs(dz) < G.grabDepthDeadZone) dz = 0;
+          if (Math.abs(dx) + Math.abs(dy) > 0.0015 || dz) emit({ type: 'grab', hand: side, phase: 'move', dx, dy, dz });
+        }
+        t.last = sp;
+        t.z = zs;
+      } else if (!pinch && t) {
+        if (t.dragging) emit({ type: 'grab', hand: side, phase: 'end', dx: 0, dy: 0, dz: 0 });
+        else if (now - t.down < G.tapMs + 150 && Math.hypot(t.last.x - t.start.x, t.last.y - t.start.y) < G.tapMaxMove) fire({ type: 'tap', hand: side }, 'grab', now);
+        delete tracks[side];
+      }
+      // pointer: this hand pointing or two-finger pinching
+      const pointing = h.pose === 'point' || h.pose === 'pinch';
+      if (pointing) {
+        emit({ type: 'pointer', hand: side, x: sp.x, y: sp.y, visible: true });
+        pointerShown[side] = true;
+      } else if (pointerShown[side]) {
+        emit({ type: 'pointer', hand: side, x: 0, y: 0, visible: false });
+        pointerShown[side] = false;
+      }
     }
-    if (!grab.dragging && now - grab.since >= G.tapMs) {
-      grab.dragging = true;
-      emit({ type: 'grab', phase: 'start', dx: 0, dy: 0, dz: 0 });
+    for (const side of ['left', 'right'] as Hand[]) {
+      if (present.has(side)) continue;
+      const t = tracks[side];
+      if (t?.dragging) emit({ type: 'grab', hand: side, phase: 'end', dx: 0, dy: 0, dz: 0 });
+      delete tracks[side];
+      if (pointerShown[side]) emit({ type: 'pointer', hand: side, x: 0, y: 0, visible: false }), (pointerShown[side] = false);
     }
-    if (grab.dragging) {
-      const dx = sp.x - grab.last.x;
-      const dy = sp.y - grab.last.y;
-      const dz = (z - grab.last.z) * G.grabDepthGain;
-      if (Math.abs(dx) + Math.abs(dy) > 0.0015 || Math.abs(dz) > 0.01) emit({ type: 'grab', phase: 'move', dx, dy, dz });
-    }
-    grab.last = { ...sp, z };
   }
 
   /** Both hands pinching: their spread scales the selection. */
@@ -482,7 +515,6 @@ export function createGestureInterpreter(emit: (cmd: Command) => void = commands
       else if (mode === 'point') actPoint(seen[0], now);
       else if (mode === 'gather') actZoomPose(seen[0], now, 'in');
       else if (mode === 'spread') actZoomPose(seen[0], now, 'out');
-      else if (mode === 'grab') actGrab(seen[0], now);
       else if (mode === 'scale') actScale(seen);
       else if (mode === 'rotate') {
         const clutch = pickClutch(seen)!;
@@ -501,16 +533,8 @@ export function createGestureInterpreter(emit: (cmd: Command) => void = commands
     lastFrame = now;
     if (mode !== 'rotate') clutchSide = null;
 
-    // ---- pointer: one hand pointing or pinching drives an on-screen pointer ----
-    const pointing = seen.length === 1 && (seen[0].pose === 'point' || seen[0].pose === 'pinch'); // not the 3-finger zoom pinch
-    if (pointing) {
-      const sp = screenPoint(seen[0]);
-      emit({ type: 'pointer', x: sp.x, y: sp.y, visible: true });
-      pointerShown = true;
-    } else if (pointerShown) {
-      emit({ type: 'pointer', x: 0, y: 0, visible: false });
-      pointerShown = false;
-    }
+    // ---- per-hand pointers, taps and drags (independent of the mode) ----
+    trackHands(seen, now);
 
     // ---- label ----
     let label: GestureLabel = seen.length ? 'idle' : 'none';
@@ -520,7 +544,7 @@ export function createGestureInterpreter(emit: (cmd: Command) => void = commands
     else if (mode === 'point') label = 'point';
     else if (mode === 'rotate') label = 'rotate';
     else if (mode === 'fists') label = 'fists';
-    else if (mode === 'grab') label = grab?.dragging ? 'dragging' : 'grab';
+    else if (mode === 'grab') label = Object.values(tracks).some((t) => t?.dragging) ? 'dragging' : 'grab';
     else if (mode === 'scale') label = 'scale';
     else if (seen.length === 2 && seen.some((h) => h.shape.pinching)) label = 'clutch';
 

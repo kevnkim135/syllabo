@@ -33,7 +33,7 @@ export function Diagram({ spec }: { spec: DiagramSpec }) {
       const [x, y] = at(b, t);
       let gy = y;
       if (spec.ground !== undefined) gy = Math.max(y, spec.ground + (b.radius ?? 0.4) * 0.9); // never sink into the ground
-      groups.current.get(b.id)?.position.set(x, gy, 0);
+      groups.current.get(b.id)?.position.set(x, gy, b.z ?? 0);
       // face the direction of travel (cars, planes, rockets)
       const vx = b.motion.vx + (b.motion.ax ?? 0) * t;
       const vy = b.motion.vy + (b.motion.ay ?? 0) * t;
@@ -54,8 +54,8 @@ export function Diagram({ spec }: { spec: DiagramSpec }) {
         if (el.type === 'body') {
           const r = el.radius ?? 0.4;
           return (
-            <group key={i} ref={register(el.id)} position={[el.x, el.y, 0]}>
-              <group ref={register(`${el.id}:shape`)}>
+            <group key={i} ref={register(el.id)} position={[el.x, el.y, el.z ?? 0]}>
+              <group ref={register(`${el.id}:shape`)} rotation={[0, 0, el.angle ? (el.angle * Math.PI) / 180 - Math.PI / 2 * (el.shape === 'ladder' ? 1 : 0) : 0]}>
                 <BodyShapeMesh shape={el.shape} r={r} color={el.color} />
               </group>
               <Label text={el.label} position={[0, r + 0.42, 0]} />

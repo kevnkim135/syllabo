@@ -1,5 +1,5 @@
 // Canned responses so the UI works with no API key (MOCK mode).
-import type { LessonKind, LessonMap, LessonRequest, MoleculeSpec, Problem, ReactionResult, ReactRequest, ScopeInfo, SolveRequest, TopicDetail, VisualSpec } from '../shared/types';
+import type { SandboxItemSpec, BodyShape, LessonKind, LessonMap, LessonRequest, MoleculeSpec, Problem, ReactionResult, ReactRequest, ScopeInfo, SolveRequest, TopicDetail, VisualSpec } from '../shared/types';
 
 const water: VisualSpec = {
   kind: 'molecule',
@@ -209,4 +209,31 @@ export function reactFixture(req: ReactRequest): ReactionResult {
     return { reacts: true, equation: '2 H2 + O2 -> 2 H2O', explanation: 'Mock: hydrogen burns in oxygen to make water.', products: [{ name: 'Water', count: 2, molecule: water as MoleculeSpec }] };
   }
   return { reacts: false, equation: '', explanation: 'Mock mode only knows a couple of reactions (methane or hydrogen with oxygen, plus heat). Add an API key for real chemistry.', products: [] };
+}
+
+/** Mock "new example" batch: the subject's group, minus what was already shown (cycling when all were seen). */
+export function examplesFixture(subject: string, avoid: string[]): VisualSpec[] {
+  const s = subject.toLowerCase();
+  const group = /chem|molec|bond|atom/.test(s) ? VISUALS.molecule : /phys|force|motion|mechanic|diagram/.test(s) ? VISUALS.diagram : VISUALS.surface;
+  const all = group.map(([, v]) => v);
+  const fresh = all.filter((v) => !avoid.includes(v.title));
+  return fresh.length ? fresh : all;
+}
+
+const MOCK_BODIES: [RegExp, BodyShape, number, number, number?][] = [
+  // [name pattern, shape, mass kg, radius, charge]
+  [/\bcar\b/, 'car', 1200, 1.1], [/truck/, 'truck', 8000, 1.4], [/ball/, 'ball', 0.6, 0.35], [/crate|box|block/, 'crate', 20, 0.6],
+  [/cart/, 'cart', 5, 0.6], [/\bsun\b|star/, 'sun', 1000, 1.4], [/planet|earth|mars/, 'planet', 5, 0.6], [/moon/, 'moon', 0.5, 0.35],
+  [/rocket/, 'rocket', 500, 0.9], [/person|man|woman|student/, 'person', 70, 0.8], [/proton/, 'charge', 1, 0.35, 1], [/electron/, 'charge', 1, 0.3, -1],
+];
+
+export function sandboxItemFixture(name: string): SandboxItemSpec {
+  const n = name.toLowerCase();
+  const hit = MOCK_BODIES.find(([re]) => re.test(n));
+  if (hit) {
+    const [, shape, mass, radius, charge] = hit;
+    return { kind: 'body', name: name.replace(/^./, (c) => c.toUpperCase()), body: { shape, mass, radius, charge, color: charge && charge < 0 ? '#3f7fd9' : undefined } };
+  }
+  const molecule = moleculeFixture(name);
+  return { kind: 'molecule', name: molecule.title.split(/[(:]/)[0].trim(), molecule };
 }

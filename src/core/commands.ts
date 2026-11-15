@@ -2,6 +2,8 @@
 // Adding a new interaction = add a Command variant, emit it from input/, handle it in ui/ or core/lesson.ts.
 import type { LessonKind } from '../../shared/types';
 
+export type Hand = 'left' | 'right';
+
 export type Command =
   // ---- camera (handled by the 3D stage) ----
   | { type: 'rotate'; dx: number; dy: number } // radians: yaw, pitch
@@ -19,9 +21,11 @@ export type Command =
   | { type: 'modelStep'; step: 1 | -1 } // next / previous model in this lesson's gallery (swipe left / right)
   | { type: 'ask'; text: string }
   // ---- direct manipulation (handled by the sandbox; ignored elsewhere) ----
-  | { type: 'pointer'; x: number; y: number; visible: boolean } // fingertip as a screen pointer, 0..1 (x right, y down)
-  | { type: 'tap' } // quick pinch: select / deselect what the pointer is on
-  | { type: 'grab'; phase: 'start' | 'move' | 'end'; dx: number; dy: number; dz: number } // pinch held: drag; dx, dy screen fractions, dz metres toward the user
+  // `hand` is the user's own left / right hand: each hand has its own pointer, taps and drags
+  | { type: 'pointer'; hand: Hand; x: number; y: number; visible: boolean } // fingertip as a screen pointer, 0..1 (x right, y down)
+  | { type: 'tap'; hand: Hand } // quick two-finger pinch: select / deselect what that hand points at
+  | { type: 'grab'; hand: Hand; phase: 'start' | 'move' | 'end'; dx: number; dy: number; dz: number } // pinch held: drag; dx, dy screen fractions, dz scene units toward the user
+  | { type: 'impulse'; ids: string[]; dv: [number, number, number] } // sandbox physics: change these bodies' velocity
   | { type: 'scaleSel'; factor: number } // a free-form spoken request: core/assistant.ts works out what it means
   | { type: 'generate'; request: string } // "show me benzene", "graph x squared minus y squared"
   | { type: 'solve'; question: string }; // spoken or typed problem

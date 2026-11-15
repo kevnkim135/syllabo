@@ -108,3 +108,14 @@
 .sb-result p { margin: 0 0 0.35rem; font-size: 0.86rem; }
 .sb-eq { font-weight: 700; color: var(--ink); font-size: 0.95rem !important; font-variant-numeric: tabular-nums; }
 .sb-help li { margin: 0.35rem 0; font-size: 0.82rem; }
+.sb-contact { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0.7rem 0.8rem; margin-bottom: 0.8rem; border-radius: var(--radius-sm); background: color-mix(in srgb, #ff9f1c 12%, var(--white)); border: 1px solid color-mix(in srgb, #ff9f1c 40%, var(--white)); animation: bloom 0.3s var(--ease); }
+.sb-contact p { margin: 0; width: 100%; font-size: 0.86rem; text-transform: capitalize; }
+.sb-contact .muted { font-size: 0.76rem; }
+.sb-dot.body { border-radius: 3px; }
+.sb-mass { margin-left: auto; font-size: 0.74rem; text-transform: none; }
+.sb-physics { margin: 0.2rem 0 0.4rem; }
+.sb-physics p { font-size: 0.8rem; margin: 0.4rem 0 0; }
+.sb-toggle { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; cursor: pointer; }
+.sb-toggle input { accent-color: var(--violet); }
+.sb-switches { display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem 0.6rem; margin-bottom: 0.3rem; }
+.sb-switches .sb-toggle { font-size: 0.8rem; }

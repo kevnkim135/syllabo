@@ -1,9 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { ExpandRequest, IntentRequest, IntentResult, LessonKind, LessonMap, LessonRequest, MoleculeSpec, Problem, ReactionResult, ReactRequest, ScopeInfo, SolveRequest, TopicDetail } from '../shared/types';
+import type { SandboxItemSpec, VisualSpec, ExpandRequest, IntentRequest, IntentResult, LessonKind, LessonMap, LessonRequest, MoleculeSpec, Problem, ReactionResult, ReactRequest, ScopeInfo, SolveRequest, TopicDetail } from '../shared/types';
 import { ruleIntent } from '../shared/intentRules';
-import { buildExpandPrompt, buildIntentPrompt, buildMoleculePrompt, buildPrompt, buildReactPrompt, buildScopePrompt, buildSolvePrompt, SYSTEM } from './prompts';
-import { expandFixture, fixture, moleculeFixture, reactFixture, scopeFixture, solveFixture } from './fixtures';
-import { validate, validateDetail, validateIntent, validateMolecule, validateProblem, validateReaction, validateScope } from './validate';
+import { buildExamplesPrompt, buildExpandPrompt, buildSandboxItemPrompt, buildIntentPrompt, buildMoleculePrompt, buildPrompt, buildReactPrompt, buildScopePrompt, buildSolvePrompt, SYSTEM } from './prompts';
+import { examplesFixture, expandFixture, fixture, sandboxItemFixture, moleculeFixture, reactFixture, scopeFixture, solveFixture } from './fixtures';
+import { repairLatex, validate, validateDetail, validateIntent, validateMolecule, validateProblem, validateReaction, validateSandboxItem, validateScope, validateVisuals } from './validate';
 
 let client: Anthropic | null = null;
 
@@ -70,6 +70,18 @@ export function solveProblem(req: SolveRequest): Promise<Problem | undefined> {
   return ask(content, validateProblem, 'solve');
 }
 
+/** A batch of different example models (not cached: each call should bring new ones). */
+export function makeExamples(req: { subject: string; level?: string; focus?: string; avoid?: string[] }): Promise<VisualSpec[] | undefined> {
+  if (usingMock()) return mock(examplesFixture(req.subject, req.avoid ?? []));
+  return ask(buildExamplesPrompt(req), validateVisuals, `examples for "${req.subject}"`, 16000);
+}
+
+/** Whatever the student asked to put in the sandbox: a molecule, or a physical body with mass. Cached. */
+export function makeSandboxItem(name: string, subject?: string, level?: string): Promise<SandboxItemSpec | undefined> {
+  if (usingMock()) return mock(sandboxItemFixture(name));
+  return cached(keyOf('sandbox-item', name, subject), () => ask(buildSandboxItemPrompt(name, subject, level), validateSandboxItem, `sandbox item "${name}"`));
+}
+
 /** One molecule by name, for the chemistry sandbox. Cached. */
 export function makeMolecule(name: string): Promise<MoleculeSpec | undefined> {
   if (usingMock()) return mock(moleculeFixture(name));
@@ -110,12 +122,20 @@ async function ask<T>(first: string | Anthropic.ContentBlockParam[], check: (raw
       messages: [{ role: 'user', content }],
     });
     const text = msg.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('');
-    const data = check(extractJson(text));
+    const data = check(repairAll(extractJson(text)));
     if (data !== undefined) return data;
     console.warn(`[llm] invalid output for ${label} (attempt ${attempt + 1})`);
     content.push({ type: 'text', text: 'Your previous reply was not valid JSON for this exact shape. Reply again with ONLY the JSON.' });
   }
   return undefined;
+}
+
+/** Repair LaTeX that lost its backslashes to JSON escapes, in every string of a parsed reply. */
+function repairAll(v: unknown): unknown {
+  if (typeof v === 'string') return repairLatex(v);
+  if (Array.isArray(v)) return v.map(repairAll);
+  if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, repairAll(x)]));
+  return v;
 }
 
 /** Tolerates code fences or stray prose around the JSON. */

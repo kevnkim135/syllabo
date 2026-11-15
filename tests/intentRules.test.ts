@@ -50,9 +50,20 @@ test('sandbox: add, move, react with a condition, remove', () => {
   assert.deepEqual(act('add two oxygens', box), { action: 'sandboxAdd', name: 'oxygen', count: 2 });
   assert.deepEqual(act('add methane to the sandbox', {}), { action: 'sandboxAdd', name: 'methane', count: 1 });
   assert.deepEqual(act('move the methane to the left', box), { action: 'sandboxMove', target: 'the methane', direction: 'left' });
-  assert.deepEqual(act('push them together', box), { action: 'sandboxMove', target: 'them', direction: 'together' });
+  assert.deepEqual(act('push them together', box), { action: 'sandboxPush', target: 'them', direction: 'together', force: undefined }); // molecules just step, bodies get a shove
   assert.deepEqual(act('react them with heat', box), { action: 'sandboxReact', condition: 'heat' });
   assert.deepEqual(act('now ignite it', box), { action: 'sandboxReact', condition: 'heat' });
   assert.deepEqual(act('remove the water', box), { action: 'sandboxRemove', target: 'the water' });
   assert.deepEqual(act('open the sandbox'), { action: 'sandbox' });
+});
+
+test('physics sandbox: push with a force, gravity', () => {
+  const box: IntentContext = { subject: 'Momentum', sandbox: ['Car', 'Ball'] };
+  assert.deepEqual(act('push the car right with 50 newtons', box), { action: 'sandboxPush', target: 'the car', direction: 'right', force: 50 });
+  assert.deepEqual(act('kick the ball left', box), { action: 'sandboxPush', target: 'the ball', direction: 'left', force: undefined });
+  assert.deepEqual(act('turn off gravity', box), { action: 'sandboxSetting', setting: 'gravity', on: false });
+  assert.deepEqual(act('no air resistance', box), { action: 'sandboxSetting', setting: 'air', on: false });
+  assert.deepEqual(act('turn friction back on', box), { action: 'sandboxSetting', setting: 'friction', on: true });
+  assert.deepEqual(act('make the collisions elastic', box), { action: 'sandboxSetting', setting: 'elastic', on: true });
+  assert.deepEqual(act('make collisions inelastic', box), { action: 'sandboxSetting', setting: 'elastic', on: false });
 });

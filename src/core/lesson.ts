@@ -4,8 +4,8 @@
 // topic in one section is reflected in all four. Saved lessons (core/library.ts) stay in sync
 // automatically and reopen without generating anything again.
 import { useSyncExternalStore } from 'react';
-import type { LessonKind, LessonMap, Problem, ScopeInfo, VisualSpec } from '../../shared/types';
-import { fetchLesson, fetchMolecule, fetchReact, fetchScope } from './api';
+import type { LessonKind, LessonMap, Problem, SandboxSetting, ScopeInfo, VisualSpec } from '../../shared/types';
+import { fetchExamples, fetchLesson, fetchReact, fetchSandboxItem, fetchScope } from './api';
 import { commands } from './commands';
 import { library, lessonTitle, newId, type SandboxItem, type SandboxReaction, type SavedLesson } from './library';
 
@@ -31,6 +31,7 @@ export interface LessonState {
   visualVariant: number; // bumped for "new example"
   models: VisualSpec[]; // every model built in this lesson, in order (swipe left / right through them)
   modelIndex: number;
+  exampleQueue: VisualSpec[]; // ready-made different examples: "new example" shows the next one instantly
   solved: Problem[]; // the student's own problems, newest first
   asked: { id: number; question: string } | null; // pending spoken/typed problem for the problems section
   stageMode: 'models' | 'sandbox'; // the model gallery, or the chemistry sandbox
@@ -46,10 +47,16 @@ export interface Sandbox {
   reaction: SandboxReaction | null;
   busy: null | 'add' | 'react';
   error: string | null;
+  gravity: boolean; // bodies fall to the bench floor (planets and stars pull on each other instead)
+  friction: boolean; // rolling friction on the floor
+  air: boolean; // air resistance (never in space)
+  elastic: boolean; // perfectly elastic collisions: no kinetic energy lost
+  contact: string[] | null; // molecules that are touching: the panel offers to react them
+  event: string | null; // last collision, explained (momentum and energy before / after)
 }
 export type MoveDirection = 'left' | 'right' | 'up' | 'down' | 'closer' | 'farther' | 'together' | 'apart';
 
-const emptySandbox = (): Sandbox => ({ items: [], selected: [], reaction: null, busy: null, error: null });
+const emptySandbox = (): Sandbox => ({ items: [], selected: [], reaction: null, busy: null, error: null, gravity: true, friction: true, air: true, elastic: false, contact: null, event: null });
 
 export interface Workspace {
   view: View;
@@ -74,6 +81,7 @@ const blank = (level: string): LessonState => ({
   visualVariant: 0,
   models: [],
   modelIndex: 0,
+  exampleQueue: [],
   solved: [],
   asked: null,
   stageMode: 'models',
@@ -130,7 +138,7 @@ function snapshot(s: LessonState): SavedLesson {
     explored: s.explored,
     solved: s.solved,
     folderId: s.folderId,
-    sandbox: { items: s.sandbox.items.filter((i) => !i.dying).map(({ dying: _d, ...i }) => i), reaction: s.sandbox.reaction },
+    sandbox: { items: s.sandbox.items.filter((i) => !i.dying).map(({ dying: _d, ...i }) => i), reaction: s.sandbox.reaction, gravity: s.sandbox.gravity, friction: s.sandbox.friction, air: s.sandbox.air, elastic: s.sandbox.elastic },
     createdAt: s.createdAt,
     updatedAt: Date.now(),
   };
@@ -240,7 +248,7 @@ export const lesson = {
     withActive((s) => {
       const focus = topic?.trim() || null;
       if (focus === s.focus) return;
-      update(s.id, { focus, visualRequest: null, visualVariant: 0, explored: focus ? addUnique(s.explored, focus) : s.explored });
+      update(s.id, { focus, visualRequest: null, visualVariant: 0, exampleQueue: [], explored: focus ? addUnique(s.explored, focus) : s.explored });
       loadAll(s.id);
     });
   },
@@ -255,6 +263,8 @@ export const lesson = {
       ws = { ...ws, view: 'lesson' };
       update(s.id, { section });
       if (s.stale[section] && !s.loading[section]) load(s.id, section);
+      // opening the model section gets the next examples ready, so the first twirl is instant
+      if (section === 'visual' && !s.exampleQueue.length && s.models.length) refillExamples(s.id);
     });
   },
 
@@ -318,7 +328,7 @@ export const lesson = {
       data: { ...saved.data, ...(models.length ? { visual: models[modelIndex] } : {}) },
       models,
       modelIndex,
-      sandbox: { ...emptySandbox(), items: saved.sandbox?.items ?? [], reaction: saved.sandbox?.reaction ?? null },
+      sandbox: { ...emptySandbox(), items: saved.sandbox?.items ?? [], reaction: saved.sandbox?.reaction ?? null, gravity: saved.sandbox?.gravity ?? true, friction: saved.sandbox?.friction ?? true, air: saved.sandbox?.air ?? true, elastic: saved.sandbox?.elastic ?? false },
       savedAt: saved.updatedAt,
     });
     order = [...order, id];
@@ -337,11 +347,24 @@ export const lesson = {
       load(s.id, 'visual');
     });
   },
-  /** A different example model for the current topic; it joins the gallery. */
+  /**
+   * A different example for the current topic, never one already in this lesson. It comes from a queue of
+   * ready-made examples (instant), which refills itself in the background before it runs out.
+   */
   newExample() {
     withActive((s) => {
-      update(s.id, { visualRequest: null, visualVariant: s.visualVariant + 1 });
-      load(s.id, 'visual');
+      const id = s.id;
+      const seen = new Set(s.models.map((m) => m.title.toLowerCase()));
+      const queue = s.exampleQueue.filter((v) => !seen.has(v.title.toLowerCase()));
+      const next = queue[0];
+      if (next) {
+        const models = [...s.models, next];
+        update(id, { exampleQueue: queue.slice(1), models, modelIndex: models.length - 1, data: { ...s.data, visual: next }, visualRequest: null });
+        if (queue.length <= 2) refillExamples(id);
+        return;
+      }
+      update(id, (x) => ({ loading: { ...x.loading, visual: true }, errors: { ...x.errors, visual: undefined } }));
+      refillExamples(id, true);
     });
   },
   selectModel(index: number) {
@@ -370,26 +393,71 @@ export const lesson = {
       update(s.id, { stageMode, section: 'visual' });
     });
   },
-  /** Add molecules by name ("water", "benzene") to the shared space. */
+  /** Add things by name: a molecule ("water") or a physical body ("a car", "a proton"); the server decides which. */
   sandboxAdd(name: string, count = 1) {
     withActive((s) => {
       const id = s.id;
       ws = { ...ws, view: 'lesson' };
       update(id, (x) => ({ stageMode: 'sandbox', section: 'visual', sandbox: { ...x.sandbox, busy: 'add', error: null } }));
-      fetchMolecule(name.trim())
-        .then((molecule) =>
+      fetchSandboxItem(name.trim(), s.focus ? `${s.subject} (${s.focus})` : (s.subject ?? undefined), s.level)
+        .then((spec) =>
           update(id, (x) => {
             const items = [...x.sandbox.items];
             for (let k = 0; k < Math.max(1, Math.min(count, 6)); k++) {
-              const item = { id: newId(), name: tidyName(molecule.title, name), molecule, pos: freeSlot(items), scale: 1 };
-              items.push(item);
+              const base = { id: newId(), name: spec.name || tidyName(name, name), pos: freeSlot(items), scale: 1 };
+              const pos: [number, number, number] = spec.kind === 'body' && !isCelestial(spec.body.shape) ? [base.pos[0], -2.6 + spec.body.radius, base.pos[2]] : base.pos;
+              items.push(spec.kind === 'molecule' ? { ...base, kind: 'molecule', molecule: spec.molecule } : { ...base, pos, kind: 'body', body: spec.body, vel: [0, 0, 0] });
             }
             // adding never changes the selection: selecting stays a deliberate act
             return { sandbox: { ...x.sandbox, items, busy: null } };
           }),
         )
-        .catch((e: Error) => update(id, (x) => ({ sandbox: { ...x.sandbox, busy: null, error: `Could not build ${name}: ${e.message}` } })));
+        .catch((e: Error) => update(id, (x) => ({ sandbox: { ...x.sandbox, busy: null, error: `Could not add ${name}: ${e.message}` } })));
     });
+  },
+  /** Give bodies a shove (voice: "push the car right with 50 newtons"). Molecules just move a step. */
+  sandboxPush(ids: string[], dir: MoveDirection, force?: number) {
+    withActive((s) => {
+      const unit: Record<string, [number, number, number]> = { left: [-1, 0, 0], right: [1, 0, 0], up: [0, 1, 0], down: [0, -1, 0], closer: [0, 0, 1], farther: [0, 0, -1] };
+      const items = s.sandbox.items.filter((i) => ids.includes(i.id));
+      const bodies = items.filter((i) => i.kind === 'body');
+      const centre = centroid(s.sandbox.items.map((i) => i.pos));
+      for (const b of bodies) {
+        let u = unit[dir];
+        if (dir === 'together' || dir === 'apart') {
+          const d = [centre[0] - b.pos[0], centre[1] - b.pos[1], centre[2] - b.pos[2]];
+          const n = Math.hypot(...d) || 1;
+          u = d.map((v) => ((dir === 'together' ? 1 : -1) * v) / n) as [number, number, number];
+        }
+        // a shove lasting about half a second: dv = F t / m, kept visible for very light and very heavy things
+        const mass = b.body!.mass;
+        const dv = force ? Math.min(12, Math.max(2, (force * 0.5) / Math.max(mass, 0.05))) : 5;
+        commands.emit({ type: 'impulse', ids: [b.id], dv: u.map((v) => v * dv) as [number, number, number] });
+      }
+      const molecules = items.filter((i) => i.kind !== 'body').map((i) => i.id);
+      if (molecules.length) lesson.sandboxNudge(molecules, dir);
+    });
+  },
+  /** Physics switches: gravity, friction, air resistance, perfectly elastic collisions. */
+  sandboxSetting(setting: SandboxSetting, on: boolean) {
+    withActive((s) => update(s.id, { sandbox: { ...s.sandbox, [setting]: on } }));
+  },
+  /** The scene reports where moving bodies are, so saving and reopening keeps them in place. */
+  sandboxSync(states: { id: string; pos: [number, number, number]; vel: [number, number, number] }[]) {
+    withActive((s) => {
+      const by = new Map(states.map((x) => [x.id, x]));
+      const items = s.sandbox.items.map((i) => (by.has(i.id) ? { ...i, pos: by.get(i.id)!.pos, vel: by.get(i.id)!.vel } : i));
+      update(s.id, { sandbox: { ...s.sandbox, items } });
+    });
+  },
+  sandboxContact(ids: string[] | null) {
+    withActive((s) => {
+      const same = (s.sandbox.contact ?? []).join() === (ids ?? []).join();
+      if (!same) update(s.id, { sandbox: { ...s.sandbox, contact: ids && ids.length ? ids : null } });
+    });
+  },
+  sandboxEvent(text: string | null) {
+    withActive((s) => update(s.id, { sandbox: { ...s.sandbox, event: text } }));
   },
   /** Select sandbox items: replace the selection, toggle items in it, or add to it. */
   sandboxSelect(ids: string[], how: 'set' | 'toggle' | 'add' = 'set') {
@@ -447,11 +515,12 @@ export const lesson = {
   sandboxReact(condition = '') {
     withActive((s) => {
       const id = s.id;
-      const pool = s.sandbox.items.filter((i) => !i.dying);
-      // two or more selected: just those; otherwise everything in the space
+      const pool = s.sandbox.items.filter((i) => !i.dying && i.kind !== 'body' && i.molecule);
+      // molecules that are touching first, then two or more selected, otherwise every molecule in the space
+      const touching = pool.filter((i) => s.sandbox.contact?.includes(i.id));
       const picked = pool.filter((i) => s.sandbox.selected.includes(i.id));
-      const chosen = picked.length >= 2 ? picked : pool;
-      if (!chosen.length) return update(id, { sandbox: { ...s.sandbox, error: 'Add some molecules first, for example "add methane and oxygen".' } });
+      const chosen = touching.length >= 2 ? touching : picked.length >= 2 ? picked : pool;
+      if (!chosen.length) return update(id, { sandbox: { ...s.sandbox, error: 'Reactions need molecules: try "add methane and two oxygens".' } });
       const counts = new Map<string, number>();
       for (const i of chosen) counts.set(i.name, (counts.get(i.name) ?? 0) + 1);
       update(id, (x) => ({ sandbox: { ...x.sandbox, busy: 'react', error: null } }));
@@ -461,7 +530,7 @@ export const lesson = {
           if (!result.reacts) return update(id, (x) => ({ sandbox: { ...x.sandbox, busy: null, reaction } }));
           const meet = centroid(chosen.map((i) => i.pos));
           const gone = new Set(chosen.map((i) => i.id));
-          update(id, (x) => ({ sandbox: { ...x.sandbox, busy: null, reaction, selected: [], items: x.sandbox.items.map((i) => (gone.has(i.id) ? { ...i, dying: meet } : i)) } }));
+          update(id, (x) => ({ sandbox: { ...x.sandbox, busy: null, reaction, selected: [], contact: null, items: x.sandbox.items.map((i) => (gone.has(i.id) ? { ...i, dying: meet } : i)) } }));
           setTimeout(() => {
             update(id, (x) => {
               const items = x.sandbox.items.filter((i) => !gone.has(i.id));
@@ -471,7 +540,7 @@ export const lesson = {
                 for (let c = 0; c < p.count; c++, k++) {
                   const a = (k / Math.max(total, 1)) * Math.PI * 2;
                   const r = total > 1 ? 2.6 + total * 0.4 : 0; // products fan out around where the reactants met
-                  const item = { id: newId(), name: p.name, molecule: p.molecule, pos: clampPos([meet[0] + Math.cos(a) * r, meet[1] + Math.sin(a) * r * 0.35, meet[2] + Math.sin(a) * r * 0.9]), scale: 1 };
+                  const item = { id: newId(), name: p.name, kind: 'molecule' as const, molecule: p.molecule, pos: clampPos([meet[0] + Math.cos(a) * r, meet[1] + Math.sin(a) * r * 0.35, meet[2] + Math.sin(a) * r * 0.9]), scale: 1 };
                   items.push(item);
                 }
               }
@@ -490,7 +559,7 @@ export const lesson = {
     if (!t || /^(?:it|them|these|those|this|that|selected|selection|the selection)$/.test(t)) return s.sandbox.selected.length ? s.sandbox.selected : items.slice(-1).map((i) => i.id);
     if (/^(?:all|everything|every(?:thing| molecule)|both)$/.test(t)) return items.map((i) => i.id);
     const words = t.split(/\s+/).filter((w) => w.length > 1);
-    return items.filter((i) => words.some((w) => i.name.toLowerCase().includes(w) || i.molecule.title.toLowerCase().includes(w))).map((i) => i.id);
+    return items.filter((i) => words.some((w) => i.name.toLowerCase().includes(w) || (i.molecule?.title ?? i.body?.shape ?? '').toLowerCase().includes(w))).map((i) => i.id);
   },
 
   // ---- problems ----
@@ -506,7 +575,31 @@ export const lesson = {
   },
 };
 
+// ---- example queue ----
+const refilling = new Set<string>();
+function refillExamples(id: string, showFirst = false) {
+  const s = sessions.get(id);
+  if (!s?.subject || refilling.has(id)) return;
+  refilling.add(id);
+  const avoid = [...s.models, ...s.exampleQueue].map((m) => m.title);
+  fetchExamples({ subject: s.subject, level: s.level, focus: s.focus ?? undefined, avoid })
+    .then((batch) =>
+      update(id, (x) => {
+        const seen = new Set([...x.models, ...x.exampleQueue].map((m) => m.title.toLowerCase()));
+        const fresh = batch.filter((v) => !seen.has(v.title.toLowerCase()));
+        const queue = [...x.exampleQueue, ...fresh];
+        if (!showFirst || !queue.length) return { exampleQueue: queue, loading: { ...x.loading, visual: false } };
+        const [next, ...rest] = queue;
+        const models = [...x.models, next];
+        return { exampleQueue: rest, models, modelIndex: models.length - 1, data: { ...x.data, visual: next }, loading: { ...x.loading, visual: false } };
+      }),
+    )
+    .catch((e: Error) => update(id, (x) => ({ loading: { ...x.loading, visual: false }, errors: showFirst ? { ...x.errors, visual: e.message } : x.errors })))
+    .finally(() => refilling.delete(id));
+}
+
 // ---- sandbox helpers ----
+export const isCelestial = (shape?: string) => shape === 'sun' || shape === 'planet' || shape === 'moon' || shape === 'satellite';
 const centroid = (ps: [number, number, number][]): [number, number, number] =>
   ps.length ? [0, 1, 2].map((k) => ps.reduce((a, p) => a + p[k], 0) / ps.length) as [number, number, number] : [0, 0, 0];
 const clampPos = (p: [number, number, number]): [number, number, number] => p.map((v) => Math.max(-9, Math.min(9, v))) as [number, number, number];

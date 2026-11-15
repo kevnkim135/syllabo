@@ -1,3 +1,4 @@
+import { splitMath } from '../../math/MathText';
 import { Fragment, type ReactNode, useEffect, useRef } from 'react';
 import type { TopicDetail } from '../../../../shared/types';
 import { lesson } from '../../../core/lesson';
@@ -189,6 +190,21 @@ const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** Text with every mention of a known term turned into an inline link, encyclopedia style. */
 function Linked({ text, terms, isOpen, onTerm }: { text: string; terms: string[]; isOpen: (t: string) => boolean; onTerm: (t: string) => void }) {
+  // Math first (rendered with KaTeX), then clickable terms inside the plain-text runs only.
+  return (
+    <>
+      {splitMath(text).map((m, k) =>
+        'html' in m ? (
+          <span key={k} className={m.display ? 'math-block' : 'math-inline'} dangerouslySetInnerHTML={{ __html: m.html }} />
+        ) : (
+          <Terms key={k} text={m.text} terms={terms} isOpen={isOpen} onTerm={onTerm} />
+        ),
+      )}
+    </>
+  );
+}
+
+function Terms({ text, terms, isOpen, onTerm }: { text: string; terms: string[]; isOpen: (t: string) => boolean; onTerm: (t: string) => void }) {
   const usable = terms.filter((t) => t.length >= 3).sort((a, b) => b.length - a.length);
   if (usable.length === 0) return <>{text}</>;
   const parts = text.split(new RegExp(`\\b(${usable.map(escape).join('|')})\\b`, 'gi'));

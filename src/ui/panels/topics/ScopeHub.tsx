@@ -1,3 +1,4 @@
+import { MathText } from '../../math/MathText';
 import { DeltaField } from '../../home/DeltaField';
 import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { lesson, useLesson } from '../../../core/lesson';
@@ -83,7 +84,7 @@ export function ScopeHub() {
       {column('left')}
       <section className="card hub-core" ref={core}>
         <h2>{subject}</h2>
-        {scope?.overview && <p className="muted">{scope.overview}</p>}
+        {scope?.overview && <MathText as="p" className="muted" text={scope.overview} />}
         <form className="ask" onSubmit={submit}>
           <input
             value={text}

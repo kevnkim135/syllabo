@@ -90,7 +90,27 @@ export function ruleIntent(transcript: string, ctx: IntentContext = {}): IntentR
         (/\b(?:heat|ignite|burn|spark|light)\b/.test(t) ? 'heat' : undefined);
       return r({ action: 'sandboxReact', condition: cond }, cond ? `Reacting them with ${cond}` : 'Reacting them');
     }
-    const move = /^(?:move|push|pull|put|shift|slide|bring|take)\s+(.+?)\s+(?:to the |over to the |towards? the |a bit |)?(left|right|up|down|closer|nearer|farther|further|away|back|forward|together|apart)\b/.exec(t);
+    // physics switches: "turn off friction", "no air resistance", "make collisions elastic", "gravity on"
+    const SETTING: [RegExp, 'gravity' | 'friction' | 'air' | 'elastic'][] = [
+      [/\bgravity\b/, 'gravity'],
+      [/\bfriction\b/, 'friction'],
+      [/\bair(?: resistance| drag)?\b|\bdrag\b/, 'air'],
+      [/\b(?:in)?elastic\b|\bbounc(?:y|iness|e)\b/, 'elastic'],
+    ];
+    const setting = SETTING.find(([re]) => re.test(t))?.[1];
+    if (setting && /\b(?:turn|switch)\s+(?:on|off)\b|\b(?:on|off)$|\b(?:no|without|remove|disable|enable|add|with|make|stop|ignore)\b/.test(t)) {
+      const inelastic = setting === 'elastic' && /\binelastic\b|\bnot elastic\b|\blose energy\b/.test(t);
+      const on = inelastic ? false : !/\boff\b|\bno\b|\bwithout\b|\bremove\b|\bdisable\b|\bstop\b|\bignore\b/.test(t);
+      const name = { gravity: 'Gravity', friction: 'Friction', air: 'Air resistance', elastic: 'Elastic collisions' }[setting];
+      return r({ action: 'sandboxSetting', setting, on }, `${name} ${on ? 'on' : 'off'}`);
+    }
+    const push = /^(?:push|shove|kick|throw|launch|fling|hit|roll)\s+(.+?)\s+(?:to the |towards? the |)?(left|right|up|down|closer|forward|away|back|together|apart)\b(?:.*?\b(\d+(?:\.\d+)?)\s*(?:n|newtons?)\b)?/.exec(t);
+    if (push) {
+      const dirMap: Record<string, 'left' | 'right' | 'up' | 'down' | 'closer' | 'farther' | 'together' | 'apart'> = { left: 'left', right: 'right', up: 'up', down: 'down', closer: 'closer', forward: 'closer', away: 'farther', back: 'farther', together: 'together', apart: 'apart' };
+      const force = push[3] ? Number(push[3]) : undefined;
+      return r({ action: 'sandboxPush', target: push[1], direction: dirMap[push[2]], force }, `Pushing ${push[1]} ${push[2]}`);
+    }
+    const move = /^(?:move|pull|put|shift|slide|bring|take)\s+(.+?)\s+(?:to the |over to the |towards? the |a bit |)?(left|right|up|down|closer|nearer|farther|further|away|back|forward|together|apart)\b/.exec(t);
     if (move) {
       const dirMap: Record<string, 'left' | 'right' | 'up' | 'down' | 'closer' | 'farther' | 'together' | 'apart'> = {
         left: 'left', right: 'right', up: 'up', down: 'down', closer: 'closer', nearer: 'closer', forward: 'closer', farther: 'farther', further: 'farther', away: 'farther', back: 'farther', together: 'together', apart: 'apart',

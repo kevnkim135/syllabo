@@ -1,19 +1,53 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
-import { commands } from '../../core/commands';
-import { lesson, useLesson } from '../../core/lesson';
+import { commands, type Hand } from '../../core/commands';
+import { isCelestial, lesson, useLesson } from '../../core/lesson';
 import type { SandboxItem } from '../../core/library';
 import { Label } from './Label';
 import { Molecule } from './Molecule';
+import { BodyShapeMesh } from './shapes';
 
 const ANGSTROM = 1.6; // Molecule.tsx scale
-const EASE = 9; // 1/s, how fast items glide to where the store says they are
+const EASE = 9; // 1/s, how fast molecules glide to where the store says they are
+const FLOOR = -2.6; // the lab bench (Environment.tsx)
+const WALL = 9; // the space is a box this wide
+const G_DOWN = 6; // gravity, scene units / s^2
+const G_ORBIT = 0.05; // between celestial bodies: a = G m / r^2
+const K_CHARGE = 6; // between charges: a = K q1 q2 / (m r^2)
+const BOUNCE = 0.45; // floor and walls (0.95 with elastic collisions on)
+const RESTITUTION = 0.8; // body-body collisions (1 with elastic collisions on)
+type Pointer = 'left' | 'right' | 'mouse';
+type V3 = [number, number, number];
+
+interface Sim {
+  pos: THREE.Vector3;
+  vel: THREE.Vector3;
+  synced: V3; // the store position this sim was last aligned with
+}
+interface Drag {
+  ids: string[];
+  offset: THREE.Vector3;
+  history: { t: number; offset: THREE.Vector3 }[]; // for the throw velocity on release
+}
+
+/** Bounding radius of an item in scene units. */
+export function radiusOf(item: SandboxItem) {
+  if (item.kind === 'body' && item.body) return item.body.radius * item.scale;
+  const a = item.molecule?.atoms ?? [];
+  if (!a.length) return 0.6;
+  const c = a.reduce((s, p) => [s[0] + p.x / a.length, s[1] + p.y / a.length, s[2] + p.z / a.length], [0, 0, 0]);
+  return Math.max(0.6, ...a.map((p) => Math.hypot(p.x - c[0], p.y - c[1], p.z - c[2]) * ANGSTROM + 0.55)) * item.scale;
+}
+const isBody = (i: SandboxItem) => i.kind === 'body' && !!i.body;
 
 /**
- * The chemistry sandbox: every molecule the student added, in one shared space. Items glide to their
- * stored positions (so voice moves are smooth), selected items wear a halo, and a drag (mouse or hand)
- * moves the whole selection live, committing to the store when it ends.
+ * The sandbox: molecules and physical bodies in one shared space.
+ * - Molecules float and glide to their stored positions; when two touch, the panel offers to react them.
+ * - Bodies obey a small physics simulation: gravity to the bench (planets and stars pull on each other
+ *   instead), charges attract or repel, and collisions conserve momentum, with the energy change explained.
+ * - Each hand (and the mouse) has its own pointer and drag, so two objects can be carried at once and
+ *   thrown: a body released while moving keeps that velocity.
  */
 export function SandboxScene() {
   const { sandbox } = useLesson();
@@ -22,116 +56,333 @@ export function SandboxScene() {
   const controls = useThree((s) => s.controls) as unknown as { enabled: boolean } | null;
   const raycaster = useMemo(() => new THREE.Raycaster(), []);
   const groups = useRef(new Map<string, THREE.Group>());
-  const drag = useRef(new THREE.Vector3()); // live offset applied to the selection while dragging
-  const dragging = useRef(false);
-  const selected = useRef<string[]>(sandbox.selected);
+  const sims = useRef(new Map<string, Sim>());
+  const drags = useRef(new Map<Pointer, Drag>());
+  const pointers = useRef(new Map<Hand, THREE.Vector2>());
+  const hover = useRef(new Map<Hand, string | null>());
+  const [hovered, setHovered] = useState<string[]>([]);
+  const cursors = { left: useRef<THREE.Mesh>(null), right: useRef<THREE.Mesh>(null) };
+  const items = useRef(sandbox.items);
+  items.current = sandbox.items;
+  const selected = useRef(sandbox.selected);
   selected.current = sandbox.selected;
-  const [hover, setHover] = useState<string | null>(null);
-  const pointer = useRef<{ ndc: THREE.Vector2; visible: boolean }>({ ndc: new THREE.Vector2(), visible: false });
-  const cursor = useRef<THREE.Mesh>(null);
+  const contactRef = useRef<string[] | null>(null);
+  const lastEvent = useRef(0);
+  const lastSync = useRef(0);
 
-  const commit = () => {
-    if (drag.current.lengthSq() > 1e-6) lesson.sandboxMove(selected.current, [drag.current.x, drag.current.y, drag.current.z]);
-    drag.current.set(0, 0, 0);
-    dragging.current = false;
+  const draggedIds = () => new Set([...drags.current.values()].flatMap((d) => d.ids));
+
+  const lastReported = useRef(new Map<string, V3>());
+  /**
+   * Keep one simulation entry per body, aligned with the store whenever something other than the
+   * simulation moved it (voice, reopening a lesson). Runs every frame, so it never misses a change.
+   */
+  const syncSims = () => {
+    const list = items.current;
+    const ids = new Set(list.map((i) => i.id));
+    for (const id of sims.current.keys()) if (!ids.has(id)) sims.current.delete(id); // removed or reacted away
+    for (const it of list) {
+      if (!isBody(it)) continue;
+      const s = sims.current.get(it.id);
+      if (!s) {
+        sims.current.set(it.id, { pos: new THREE.Vector3(...it.pos), vel: new THREE.Vector3(...(it.vel ?? [0, 0, 0])), synced: it.pos });
+      } else if (s.synced !== it.pos) {
+        if (lastReported.current.get(it.id) !== it.pos) s.pos.set(...it.pos), s.vel.set(...(it.vel ?? [0, 0, 0]));
+        s.synced = it.pos;
+      }
+    }
   };
 
-  /** World size of one screen at the selection's depth, for converting screen drags into scene units. */
-  const screenToWorld = () => {
-    const ids = selected.current;
-    const centre = new THREE.Vector3();
+  /** World size of the screen at a depth, for turning screen drags into scene units. */
+  const screenToWorld = (at: THREE.Vector3) => {
+    const cam = camera as THREE.PerspectiveCamera;
+    const h = 2 * cam.position.distanceTo(at) * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
+    return { w: h * cam.aspect, h };
+  };
+  const centreOf = (ids: string[]) => {
+    const c = new THREE.Vector3();
     let n = 0;
     for (const id of ids) {
       const g = groups.current.get(id);
-      if (g) centre.add(g.position), n++;
+      if (g) c.add(g.position), n++;
     }
-    if (n) centre.divideScalar(n);
-    const cam = camera as THREE.PerspectiveCamera;
-    const dist = cam.position.distanceTo(centre);
-    const h = 2 * dist * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
-    return { w: h * cam.aspect, h };
+    return n ? c.divideScalar(n) : c;
   };
 
-  // ---- hands: pointer, tap, grab, scale ----
+  const startDrag = (who: Pointer, ids: string[]) => {
+    if (!ids.length) return;
+    for (const d of drags.current.values()) d.ids = d.ids.filter((i) => !ids.includes(i)); // an object is carried by one hand
+    drags.current.set(who, { ids, offset: new THREE.Vector3(), history: [] });
+  };
+  const moveDrag = (who: Pointer, delta: THREE.Vector3) => {
+    const d = drags.current.get(who);
+    if (!d) return;
+    d.offset.add(delta);
+    d.history.push({ t: performance.now(), offset: d.offset.clone() });
+    while (d.history.length > 8) d.history.shift();
+  };
+  const endDrag = (who: Pointer) => {
+    const d = drags.current.get(who);
+    drags.current.delete(who);
+    if (!d || !d.ids.length) return;
+    // throw velocity from the last ~120 ms of the drag
+    const now = performance.now();
+    const recent = d.history.filter((h) => now - h.t < 160);
+    const v = recent.length >= 2 ? recent.at(-1)!.offset.clone().sub(recent[0].offset).divideScalar(Math.max(0.03, (recent.at(-1)!.t - recent[0].t) / 1000)) : new THREE.Vector3();
+    if (v.length() > 14) v.setLength(14);
+    const molecules: string[] = [];
+    for (const id of d.ids) {
+      const s = sims.current.get(id);
+      if (s) {
+        s.pos.add(d.offset);
+        s.vel.copy(v);
+      } else molecules.push(id);
+    }
+    if (molecules.length && d.offset.lengthSq() > 1e-6) lesson.sandboxMove(molecules, [d.offset.x, d.offset.y, d.offset.z]);
+  };
+
+  // ---- hands: pointers, taps, grabs, scale; voice pushes arrive as impulses ----
   useEffect(
     () =>
       commands.on((cmd) => {
         if (cmd.type === 'pointer') {
-          pointer.current.visible = cmd.visible;
-          pointer.current.ndc.set(cmd.x * 2 - 1, -(cmd.y * 2 - 1));
+          if (cmd.visible) pointers.current.set(cmd.hand, new THREE.Vector2(cmd.x * 2 - 1, -(cmd.y * 2 - 1)));
+          else pointers.current.delete(cmd.hand), hover.current.delete(cmd.hand);
         } else if (cmd.type === 'tap') {
-          const id = hoverRef.current;
-          if (id) lesson.sandboxSelect([id], 'toggle');
+          const id = hover.current.get(cmd.hand);
+          const contact = contactRef.current;
+          if (id && contact?.includes(id)) lesson.sandboxReact(); // tapping touching molecules confirms the reaction
+          else if (id) lesson.sandboxSelect([id], 'toggle'); // each tap adds to (or removes from) the group
           else lesson.sandboxSelect([], 'set');
         } else if (cmd.type === 'grab') {
           if (cmd.phase === 'start') {
-            const id = hoverRef.current;
-            if (id && !selected.current.includes(id)) lesson.sandboxSelect([id], 'set'), (selected.current = [id]);
-            dragging.current = selected.current.length > 0;
-          } else if (cmd.phase === 'move' && dragging.current) {
-            const { w, h } = screenToWorld();
+            const id = hover.current.get(cmd.hand) ?? null;
+            const otherDragging = [...drags.current.keys()].some((k) => k !== cmd.hand);
+            let ids: string[] = [];
+            if (id && selected.current.includes(id) && !otherDragging) ids = selected.current; // carry the whole group
+            else if (id) ids = [id], lesson.sandboxSelect([id], 'add');
+            else if (!otherDragging) ids = selected.current;
+            startDrag(cmd.hand, ids);
+          } else if (cmd.phase === 'move') {
+            const d = drags.current.get(cmd.hand);
+            if (!d) return;
+            const { w, h } = screenToWorld(centreOf(d.ids));
             const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
             const up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
             const back = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 2); // toward the viewer
-            drag.current.addScaledVector(right, cmd.dx * w).addScaledVector(up, -cmd.dy * h).addScaledVector(back, cmd.dz);
-          } else if (cmd.phase === 'end' && dragging.current) commit();
-        } else if (cmd.type === 'scaleSel' && selected.current.length) {
-          lesson.sandboxScale(selected.current, cmd.factor);
+            moveDrag(cmd.hand, right.multiplyScalar(cmd.dx * w).addScaledVector(up, -cmd.dy * h).addScaledVector(back, cmd.dz));
+          } else endDrag(cmd.hand);
+        } else if (cmd.type === 'scaleSel') {
+          if (drags.current.size === 0 && selected.current.length) lesson.sandboxScale(selected.current, cmd.factor);
+        } else if (cmd.type === 'impulse') {
+          for (const id of cmd.ids) sims.current.get(id)?.vel.add(new THREE.Vector3(...cmd.dv));
         }
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [camera],
   );
-  const hoverRef = useRef<string | null>(null);
 
-  useFrame((_, delta) => {
-    const k = 1 - Math.exp(-EASE * Math.min(delta, 0.05));
-    for (const item of sandbox.items) {
-      const g = groups.current.get(item.id);
-      if (!g) continue;
-      const target = new THREE.Vector3(...(item.dying ?? item.pos));
-      if (dragging.current && selected.current.includes(item.id)) target.add(drag.current);
-      g.position.lerp(target, item.dying ? k * 0.8 : k);
-      const s = item.dying ? 0 : item.scale;
-      g.scale.setScalar(THREE.MathUtils.lerp(g.scale.x, s, k));
+  useFrame((_, rawDelta) => {
+    syncSims();
+    const frameDt = Math.min(rawDelta, 1 / 20);
+    const k = 1 - Math.exp(-EASE * frameDt);
+    const dragged = draggedIds();
+    const offsetOf = (id: string) => {
+      for (const d of drags.current.values()) if (d.ids.includes(id)) return d.offset;
+      return null;
+    };
+    const list = items.current.filter((i) => !i.dying || groups.current.has(i.id));
+
+    // ---- physics for bodies, in small substeps so orbits and fast collisions stay stable ----
+    const bodies = list.filter((i) => isBody(i) && !i.dying && !dragged.has(i.id) && sims.current.has(i.id));
+    const bounce = sandbox.elastic ? 0.95 : BOUNCE;
+    const steps = Math.max(1, Math.ceil(frameDt / (1 / 240)));
+    const dt = frameDt / steps;
+    for (let step = 0; step < steps; step++) {
+    for (const it of bodies) {
+      const s = sims.current.get(it.id)!;
+      const acc = new THREE.Vector3();
+      const celestial = isCelestial(it.body!.shape);
+      if (sandbox.gravity && !celestial) acc.y -= G_DOWN;
+      for (const other of list) {
+        if (other === it || !isBody(other)) continue;
+        const o = sims.current.get(other.id);
+        if (!o) continue;
+        const d = o.pos.clone().sub(s.pos);
+        const r2 = Math.max(d.lengthSq(), 0.36);
+        if (celestial && isCelestial(other.body!.shape)) acc.addScaledVector(d.normalize(), (G_ORBIT * other.body!.mass) / r2);
+        const q1 = it.body!.charge ?? 0;
+        const q2 = other.body!.charge ?? 0;
+        if (q1 && q2) acc.addScaledVector(d.clone().normalize(), (-K_CHARGE * q1 * q2) / (Math.max(it.body!.mass, 0.2) * r2));
+      }
+      s.vel.addScaledVector(acc, dt);
+      if (!celestial && sandbox.air) s.vel.multiplyScalar(Math.exp(-0.05 * dt)); // light air drag on the bench; none in space, so orbits keep going
+      s.pos.addScaledVector(s.vel, dt);
+      const r = radiusOf(it);
+      if (!celestial && s.pos.y - r < FLOOR) {
+        s.pos.y = FLOOR + r;
+        if (s.vel.y < 0) s.vel.y = Math.abs(s.vel.y) < 0.6 ? 0 : -s.vel.y * bounce;
+        // rolling friction, frame-rate independent: about a quarter of the speed per second
+        const roll = sandbox.friction ? Math.exp(-0.3 * dt) : 1;
+        s.vel.x *= roll;
+        s.vel.z *= roll;
+      }
+      for (const ax of ['x', 'z'] as const) {
+        if (Math.abs(s.pos[ax]) + r > WALL) {
+          s.pos[ax] = Math.sign(s.pos[ax]) * (WALL - r);
+          s.vel[ax] *= -bounce;
+        }
+      }
+      if (s.pos.y > 12) (s.pos.y = 12), (s.vel.y = -Math.abs(s.vel.y) * BOUNCE);
     }
-    // hand pointer: what is under it, and a small cursor riding the ray
-    if (pointer.current.visible) {
-      raycaster.setFromCamera(pointer.current.ndc, camera);
-      const hit = raycaster.intersectObjects([...groups.current.values()], true)[0];
+    // collisions between bodies: momentum is conserved; some kinetic energy is lost
+    for (let a = 0; a < bodies.length; a++) {
+      for (let b = a + 1; b < bodies.length; b++) {
+        const A = bodies[a];
+        const B = bodies[b];
+        const sa = sims.current.get(A.id)!;
+        const sb = sims.current.get(B.id)!;
+        const n = sb.pos.clone().sub(sa.pos);
+        const dist = n.length();
+        const min = radiusOf(A) + radiusOf(B);
+        if (dist >= min || dist < 1e-6) continue;
+        n.divideScalar(dist);
+        const ma = A.body!.mass;
+        const mb = B.body!.mass;
+        const ia = 1 / ma;
+        const ib = 1 / mb;
+        const push = (min - dist) / (ia + ib);
+        sa.pos.addScaledVector(n, -push * ia);
+        sb.pos.addScaledVector(n, push * ib);
+        const vn = sb.vel.clone().sub(sa.vel).dot(n);
+        if (vn >= 0) continue; // already separating
+        const before = { p: sa.vel.clone().multiplyScalar(ma).add(sb.vel.clone().multiplyScalar(mb)).length(), ke: 0.5 * ma * sa.vel.lengthSq() + 0.5 * mb * sb.vel.lengthSq() };
+        const j = (-(1 + (sandbox.elastic ? 1 : RESTITUTION)) * vn) / (ia + ib);
+        sa.vel.addScaledVector(n, -j * ia);
+        sb.vel.addScaledVector(n, j * ib);
+        const after = { p: sa.vel.clone().multiplyScalar(ma).add(sb.vel.clone().multiplyScalar(mb)).length(), ke: 0.5 * ma * sa.vel.lengthSq() + 0.5 * mb * sb.vel.lengthSq() };
+        const now = performance.now();
+        if (-vn > 0.4 && now - lastEvent.current > 600) {
+          lastEvent.current = now;
+          const f = (x: number) => (x >= 100 ? x.toFixed(0) : x >= 10 ? x.toFixed(1) : x.toFixed(2));
+          lesson.sandboxEvent(
+            `${A.name} hit ${B.name}. Momentum before $p = ${f(before.p)}$, after $p = ${f(after.p)}$ (conserved). ` +
+              (() => {
+                const lost = before.ke > 0 ? Math.max(0, (1 - after.ke / before.ke) * 100) : 0;
+                return `Kinetic energy ${f(before.ke)} \u2192 ${f(after.ke)}: ${lost < 1 ? 'almost none was lost (a nearly elastic hit)' : `${Math.round(lost)}% became heat and sound`}.`;
+              })(),
+          );
+        }
+      }
+    }
+    }
+
+    // ---- place everything ----
+    for (const it of list) {
+      const g = groups.current.get(it.id);
+      if (!g) continue;
+      const off = offsetOf(it.id);
+      if (isBody(it) && !it.dying) {
+        const s = sims.current.get(it.id)!;
+        g.position.copy(s.pos);
+        if (off) g.position.add(off);
+      } else {
+        const target = new THREE.Vector3(...(it.dying ?? it.pos));
+        if (off) target.add(off);
+        g.position.lerp(target, off ? 1 : it.dying ? k * 0.8 : k);
+      }
+      g.scale.setScalar(THREE.MathUtils.lerp(g.scale.x, it.dying ? 0 : it.scale, k));
+      // velocity arrow for moving bodies
+      const arrow = g.getObjectByName('vel') as THREE.ArrowHelper | undefined;
+      if (arrow) {
+        const v = sims.current.get(it.id)?.vel;
+        const speed = v ? v.length() : 0;
+        arrow.visible = speed > 0.3 && !off;
+        if (v && arrow.visible) arrow.setDirection(v.clone().normalize()), arrow.setLength(Math.min(3, 0.4 + speed * 0.3), 0.25, 0.16);
+      }
+    }
+
+    // ---- molecules touching: offer to react ----
+    const mols = list.filter((i) => !isBody(i) && !i.dying);
+    const touching = new Set<string>();
+    for (let a = 0; a < mols.length; a++) {
+      for (let b = a + 1; b < mols.length; b++) {
+        const ga = groups.current.get(mols[a].id);
+        const gb = groups.current.get(mols[b].id);
+        if (ga && gb && ga.position.distanceTo(gb.position) < (radiusOf(mols[a]) + radiusOf(mols[b])) * 0.7) touching.add(mols[a].id), touching.add(mols[b].id);
+      }
+    }
+    const contact = touching.size >= 2 ? [...touching].sort() : null;
+    if ((contact ?? []).join() !== (contactRef.current ?? []).join()) {
+      contactRef.current = contact;
+      lesson.sandboxContact(contact);
+    }
+
+    // ---- hand pointers: what each one is over, and a cursor riding its ray ----
+    const targets = [...groups.current.values()];
+    const now = new Set<string>();
+    for (const hand of ['left', 'right'] as Hand[]) {
+      const ndc = pointers.current.get(hand);
+      const cur = cursors[hand].current;
+      if (!ndc) {
+        if (cur) cur.visible = false;
+        continue;
+      }
+      raycaster.setFromCamera(ndc, camera);
+      const hit = raycaster.intersectObjects(targets, true)[0];
       let id: string | null = null;
       if (hit) for (let o: THREE.Object3D | null = hit.object; o && !id; o = o.parent) id = (o.userData.itemId as string) ?? null;
-      if (id !== hoverRef.current) (hoverRef.current = id), setHover(id);
-      const at = hit ? hit.point : raycaster.ray.at(10, new THREE.Vector3());
-      cursor.current?.position.copy(at);
-      cursor.current?.quaternion.copy(camera.quaternion);
-    } else if (hoverRef.current) (hoverRef.current = null), setHover(null);
-    if (cursor.current) cursor.current.visible = pointer.current.visible;
+      if (!drags.current.has(hand)) hover.current.set(hand, id);
+      if (id) now.add(id);
+      if (cur) {
+        cur.visible = true;
+        cur.position.copy(hit ? hit.point : raycaster.ray.at(10, new THREE.Vector3()));
+        cur.quaternion.copy(camera.quaternion);
+      }
+    }
+    const nowList = [...now].sort();
+    if (nowList.join() !== hovered.join()) setHovered(nowList);
+
+    // ---- report moving bodies to the store now and then, so saves keep them where they are ----
+    const t = performance.now();
+    if (t - lastSync.current > 700) {
+      lastSync.current = t;
+      const states = bodies
+        .map((it) => ({ it, s: sims.current.get(it.id)! }))
+        .filter(({ it, s }) => s.pos.distanceTo(new THREE.Vector3(...it.pos)) > 0.05 || s.vel.length() > 0.05)
+        .map(({ it, s }) => {
+          const pos = s.pos.toArray() as V3;
+          lastReported.current.set(it.id, pos);
+          s.synced = pos;
+          return { id: it.id, pos, vel: (s.vel.length() < 0.05 ? [0, 0, 0] : s.vel.toArray()) as V3 };
+        });
+      if (states.length) lesson.sandboxSync(states);
+    }
   });
 
-  // ---- mouse: click selects (shift adds), drag moves the selection in the camera's plane ----
+  // ---- mouse: click selects (shift adds), drag moves (and throws bodies) in the camera's plane ----
   const onDown = (item: SandboxItem) => (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
-    const ids = e.shiftKey ? null : selected.current.includes(item.id) ? selected.current : [item.id];
     if (e.shiftKey) lesson.sandboxSelect([item.id], 'toggle');
     else if (!selected.current.includes(item.id)) lesson.sandboxSelect([item.id], 'set');
-    if (ids) selected.current = ids;
+    const ids = e.shiftKey ? [item.id] : selected.current.includes(item.id) ? selected.current : [item.id];
     const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()).negate(), e.point.clone());
     const start = e.point.clone();
     const rect = gl.domElement.getBoundingClientRect();
     if (controls) controls.enabled = false;
-    dragging.current = true;
+    startDrag('mouse', ids);
     const move = (ev: PointerEvent) => {
       const ndc = new THREE.Vector2(((ev.clientX - rect.left) / rect.width) * 2 - 1, -((ev.clientY - rect.top) / rect.height) * 2 + 1);
       raycaster.setFromCamera(ndc, camera);
       const p = raycaster.ray.intersectPlane(plane, new THREE.Vector3());
-      if (p) drag.current.copy(p.sub(start));
+      const d = drags.current.get('mouse');
+      if (p && d) moveDrag('mouse', p.sub(start).sub(d.offset));
     };
     const up = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       if (controls) controls.enabled = true;
-      commit();
+      endDrag('mouse');
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
@@ -153,32 +404,32 @@ export function SandboxScene() {
           onPointerOver={(e) => (e.stopPropagation(), (gl.domElement.style.cursor = 'grab'))}
           onPointerOut={() => (gl.domElement.style.cursor = '')}
         >
-          <Molecule spec={item.molecule} />
-          <Halo item={item} on={sandbox.selected.includes(item.id)} hot={hover === item.id} />
-          <Label text={item.name} position={[0, radiusOf(item) + 0.35, 0]} height={0.3} />
+          {isBody(item) ? <BodyShapeMesh shape={item.body!.shape} r={item.body!.radius} color={item.body!.color ?? (item.body!.charge ? (item.body!.charge > 0 ? '#e0473c' : '#3f7fd9') : undefined)} /> : item.molecule && <Molecule spec={item.molecule} />}
+          {isBody(item) && <arrowHelper name="vel" args={[new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 0), 1, 0xff9f1c, 0.25, 0.16]} />}
+          <Halo r={radiusOf({ ...item, scale: 1 })} on={sandbox.selected.includes(item.id)} hot={hovered.includes(item.id)} touch={!!sandbox.contact?.includes(item.id)} />
+          <Label
+            text={isBody(item) && item.body!.charge ? `${item.name} (${item.body!.charge > 0 ? '+' : '−'})` : item.name}
+            position={[0, radiusOf({ ...item, scale: 1 }) + 0.35, 0]}
+            height={0.3}
+          />
         </group>
       ))}
-      <mesh ref={cursor} visible={false} renderOrder={20}>
-        <ringGeometry args={[0.12, 0.2, 32]} />
-        <meshBasicMaterial color="#8b6bd6" transparent opacity={0.9} depthTest={false} />
-      </mesh>
+      {(['left', 'right'] as Hand[]).map((h) => (
+        <mesh key={h} ref={cursors[h]} visible={false} renderOrder={20}>
+          <ringGeometry args={[0.12, 0.2, 32]} />
+          <meshBasicMaterial color={h === 'left' ? '#8b6bd6' : '#b9a0f0'} transparent opacity={0.9} depthTest={false} />
+        </mesh>
+      ))}
     </group>
   );
 }
 
-/** Bounding radius of a molecule in scene units (atoms are centred on their centroid by Molecule.tsx). */
-function radiusOf(item: SandboxItem) {
-  const a = item.molecule.atoms;
-  const c = a.reduce((s, p) => [s[0] + p.x / a.length, s[1] + p.y / a.length, s[2] + p.z / a.length], [0, 0, 0]);
-  return Math.max(0.6, ...a.map((p) => Math.hypot(p.x - c[0], p.y - c[1], p.z - c[2]) * ANGSTROM + 0.55));
-}
-
-function Halo({ item, on, hot }: { item: SandboxItem; on: boolean; hot: boolean }) {
-  if (!on && !hot) return null;
+function Halo({ r, on, hot, touch }: { r: number; on: boolean; hot: boolean; touch: boolean }) {
+  if (!on && !hot && !touch) return null;
   return (
     <mesh>
-      <sphereGeometry args={[radiusOf(item) + 0.15, 32, 20]} />
-      <meshBasicMaterial color="#8b6bd6" transparent opacity={on ? 0.16 : 0.08} depthWrite={false} />
+      <sphereGeometry args={[r + 0.15, 32, 20]} />
+      <meshBasicMaterial color={touch ? '#ff9f1c' : '#8b6bd6'} transparent opacity={touch ? 0.22 : on ? 0.16 : 0.08} depthWrite={false} />
     </mesh>
   );
 }

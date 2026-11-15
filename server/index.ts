@@ -2,7 +2,7 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono, type Context } from 'hono';
 import { IMAGE_TYPES, LESSON_KINDS, type ExpandRequest, type IntentContext, type IntentRequest, type LessonRequest, type ReactRequest, type SolveRequest } from '../shared/types';
-import { classifyScope, expandTopic, generateLesson, makeMolecule, react, resolveIntent, solveProblem, usingMock } from './llm';
+import { classifyScope, expandTopic, generateLesson, makeExamples, makeMolecule, makeSandboxItem, react, resolveIntent, solveProblem, usingMock } from './llm';
 
 try {
   process.loadEnvFile();
@@ -91,6 +91,24 @@ app.post('/api/intent', async (c) => {
     sandbox: list(x.sandbox, 20),
   };
   return c.json(await resolveIntent({ transcript, context }));
+});
+
+app.post('/api/examples', async (c) => {
+  const b = await json<{ subject: string; level: string; focus: string; avoid: string[] }>(c);
+  const subject = text(b.subject);
+  if (!subject) return c.json({ error: 'subject is required' }, 400);
+  const data = await makeExamples({ subject, level: text(b.level), focus: text(b.focus), avoid: list(b.avoid, 40) });
+  if (data === undefined) return c.json({ error: invalid }, 502);
+  return c.json(data);
+});
+
+app.post('/api/sandbox-item', async (c) => {
+  const b = await json<{ name: string; subject: string; level: string }>(c);
+  const name = text(b.name, 80);
+  if (!name) return c.json({ error: 'name is required' }, 400);
+  const data = await makeSandboxItem(name, text(b.subject), text(b.level));
+  if (data === undefined) return c.json({ error: invalid }, 502);
+  return c.json(data);
 });
 
 app.post('/api/molecule', async (c) => {

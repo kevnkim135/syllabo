@@ -270,12 +270,12 @@ test('pointer: a pointing or pinching hand drives a mirrored screen pointer, hid
   assert.ok(ps.length > 10);
   const first = ps[0] as Extract<Command, { type: 'pointer' }>;
   assert.ok(first.visible && first.x > 0.5, 'raw image left = user right = screen right after mirroring');
-  assert.deepEqual(ps.at(-1), { type: 'pointer', x: 0, y: 0, visible: false });
+  assert.deepEqual(ps.at(-1), { type: 'pointer', hand: 'right', x: 0, y: 0, visible: false });
 });
 
 test('tap: a quick pinch selects; holding becomes a drag with start, moves and end', () => {
   const quick = run((i) => [R(i >= 10 && i < 16 ? { pinch: true } : { curl: POINT })], 40);
-  assert.deepEqual(only(quick.cmds, 'tap'), [{ type: 'tap' }]);
+  assert.deepEqual(only(quick.cmds, 'tap'), [{ type: 'tap', hand: 'right' }]);
   assert.deepEqual(only(quick.cmds, 'grab'), []);
 
   const hold = run((i) => [R(i >= 10 && i < 50 ? { pinch: true, at: [0.4 - 0.2 * ramp(i, 25, 45), 0.6] } : { curl: POINT })], 70);
@@ -292,4 +292,25 @@ test('scale: both hands pinching and spreading grows the selection', () => {
   const f = (only(r.cmds, 'scaleSel') as Extract<Command, { type: 'scaleSel' }>[]).reduce((p, c) => p * c.factor, 1);
   assert.ok(f > 1.3, `scaled ${f}`);
   assert.deepEqual(only(r.cmds, 'rotateAxis'), []);
+});
+
+test('two hands: each pinch drags on its own, so two objects can be carried at once', () => {
+  const r = run((i) => [
+    L({ pinch: true, at: [0.7 - 0.15 * ramp(i, 20, 40), 0.6] }), // user's left hand moves toward the middle
+    R({ pinch: true, at: [0.3 + 0.15 * ramp(i, 20, 40), 0.6] }),
+  ], 50);
+  const g = only(r.cmds, 'grab') as Extract<Command, { type: 'grab' }>[];
+  for (const hand of ['left', 'right'] as const) {
+    const mine = g.filter((x) => x.hand === hand);
+    assert.equal(mine[0]?.phase, 'start', `${hand} starts`);
+    const dx = mine.filter((x) => x.phase === 'move').reduce((s, x) => s + x.dx, 0);
+    assert.ok(hand === 'left' ? dx > 0.1 : dx < -0.1, `${hand} moved ${dx}`);
+  }
+});
+
+test('a three-finger pinch zooms and never selects or drags', () => {
+  const r = run(() => [R({ gather: true })], 60);
+  assert.deepEqual(only(r.all, 'tap'), []);
+  assert.deepEqual(only(r.all, 'grab'), []);
+  assert.ok(only(r.cmds, 'zoom').length > 5);
 });

@@ -1,4 +1,4 @@
-import { NoteFigure } from './NoteFigure';
+import { MathText } from '../../math/MathText';
 import { useEffect, useRef, useState } from 'react';
 import type { TopicDetail, TopicNode } from '../../../../shared/types';
 import { fetchExpand } from '../../../core/api';
@@ -113,8 +113,8 @@ function Note({ node, path, num, ctx }: { node: TopicNode; path: string[]; num: 
         <button className="note-line" aria-expanded={open} onClick={() => ctx.toggle(here)}>
           <span className="note-num">{num}</span>
           <span className="note-text">
-            <span className="note-title">{node.title}</span>
-            {node.summary && <span className="note-sum">{node.summary}</span>}
+            <MathText className="note-title" text={node.title} />
+            {node.summary && <MathText className="note-sum" text={node.summary} />}
           </span>
           <span className="note-mark" aria-hidden>
             +
@@ -135,15 +135,14 @@ function Note({ node, path, num, ctx }: { node: TopicNode; path: string[]; num: 
           )}
           {detail && (
             <>
-              <NoteFigure query={detail.imageQuery ?? `${node.title} ${ctx.subject}`} alt={node.title} />
               {detail.explanation.split(/\n{2,}/).map((p, i) => (
-                <p key={i}>{p}</p>
+                <MathText as="p" key={i} text={p} />
               ))}
               {!!detail.keyPoints.length && (
                 <ul className="note-points" aria-label="Key points">
                   {detail.keyPoints.map((k, i) => (
                     <li key={i} style={{ animationDelay: `${0.06 + i * 0.05}s` }}>
-                      {k}
+                      <MathText text={k} />
                     </li>
                   ))}
                 </ul>
@@ -151,7 +150,7 @@ function Note({ node, path, num, ctx }: { node: TopicNode; path: string[]; num: 
               {detail.example && (
                 <p className="note-example">
                   <span>Example</span>
-                  {detail.example}
+                  <MathText text={detail.example} />
                 </p>
               )}
             </>

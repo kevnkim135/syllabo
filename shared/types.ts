@@ -56,7 +56,6 @@ export interface TopicDetail {
   explanation: string; // 2-4 short paragraphs, plain text
   keyPoints: string[];
   example?: string;
-  imageQuery?: string; // Wikipedia article title whose lead image illustrates the topic
   subtopics: TopicNode[]; // clickable, expand again
 }
 
@@ -68,7 +67,10 @@ export interface ExpandRequest {
 }
 
 /** Recognisable objects drawn instead of plain spheres, like textbook figures. */
-export const BODY_SHAPES = ['ball', 'block', 'box', 'car', 'cart', 'plane', 'rocket', 'person', 'planet', 'sun', 'moon', 'satellite', 'boat', 'pulley', 'spring', 'ramp', 'charge'] as const;
+export const BODY_SHAPES = [
+  'ball', 'block', 'box', 'crate', 'car', 'truck', 'cart', 'plane', 'rocket', 'person', 'planet', 'sun', 'moon', 'satellite', 'boat',
+  'pulley', 'spring', 'ramp', 'charge', 'ladder', 'wall', 'tank', 'cylinder', 'cone', 'tree', 'house', 'cannon', 'balloon', 'table',
+] as const;
 export type BodyShape = (typeof BODY_SHAPES)[number];
 
 /** Constant-acceleration motion, replayed in a loop: x = x0 + vx t + ax t^2 / 2 (same for y). Units per second. */
@@ -80,7 +82,13 @@ export interface BodyMotion {
   duration?: number; // seconds per loop (default 3)
 }
 
-export type BodyElement = { type: 'body'; id: string; label: string; x: number; y: number; radius?: number; shape?: BodyShape; color?: string; motion?: BodyMotion };
+export type BodyElement = {
+  type: 'body'; id: string; label: string; x: number; y: number;
+  z?: number; // depth, for 3D arrangements (default 0)
+  angle?: number; // degrees, rotation in the x-y plane (a leaning ladder, a tilted cannon)
+  radius?: number; // overall size (default 0.4)
+  shape?: BodyShape; color?: string; motion?: BodyMotion;
+};
 export type DiagramElement =
   | BodyElement
   | { type: 'path'; points: [number, number][]; label?: string } // a trajectory or outline, drawn dashed
@@ -159,6 +167,8 @@ export type VoiceIntent =
   | { action: 'sandboxRemove'; target: string }
   | { action: 'sandboxReact'; condition?: string }
   | { action: 'sandboxClear' }
+  | { action: 'sandboxPush'; target: string; direction: 'left' | 'right' | 'up' | 'down' | 'closer' | 'farther' | 'together' | 'apart'; force?: number } // shove bodies (newtons optional)
+  | { action: 'sandboxSetting'; setting: SandboxSetting; on: boolean } // physics switches
   | { action: 'none' };
 
 export interface IntentContext {
@@ -197,3 +207,18 @@ export interface ReactionResult {
   explanation: string; // 2-3 sentences: what happens and why (or why nothing happens)
   products: { name: string; count: number; molecule: MoleculeSpec }[];
 }
+
+/** A physical object in the sandbox: it has mass, can be pushed, thrown, collide, and feel gravity or charge. */
+export interface SandboxBody {
+  shape: BodyShape;
+  mass: number; // kg (shown in readouts; the simulation uses it for momentum and collisions)
+  radius: number; // scene units, about 0.3 (a ball) to 1.5 (a car)
+  color?: string;
+  charge?: number; // e.g. +1 proton, -1 electron: like charges repel, opposite attract
+}
+/** POST /api/sandbox-item body { name, subject?, level? } -> what to put in the sandbox for that name. */
+export type SandboxItemSpec = { kind: 'molecule'; name: string; molecule: MoleculeSpec } | { kind: 'body'; name: string; body: SandboxBody };
+
+/** Physics switches in the sandbox. */
+export const SANDBOX_SETTINGS = ['gravity', 'friction', 'air', 'elastic'] as const;
+export type SandboxSetting = (typeof SANDBOX_SETTINGS)[number];

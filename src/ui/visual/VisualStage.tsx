@@ -44,7 +44,7 @@ export function VisualStage({ spec, paused = false }: { spec: VisualSpec | null;
         </Canvas>
 
         <div key={box ? 'sandbox' : spec?.title} className="stage-title">
-          {box ? 'Chemistry sandbox' : spec?.title}
+          {box ? 'Sandbox' : spec?.title}
         </div>
         <div className="stage-mode" role="group" aria-label="Stage">
           <button className={!box ? 'on' : ''} aria-pressed={!box} onClick={() => lesson.setStageMode('models')}>

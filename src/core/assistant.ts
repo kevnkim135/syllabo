@@ -111,6 +111,15 @@ export function perform({ intent }: IntentResult): boolean {
     case 'sandboxReact':
       lesson.sandboxReact(intent.condition);
       return inLesson;
+    case 'sandboxPush': {
+      const ids = lesson.sandboxFind(intent.target);
+      if (!ids.length) return false;
+      lesson.sandboxPush(ids, intent.direction, intent.force);
+      return true;
+    }
+    case 'sandboxSetting':
+      lesson.sandboxSetting(intent.setting, intent.on);
+      return inLesson;
     case 'sandboxClear':
       lesson.sandboxClear();
       return inLesson;

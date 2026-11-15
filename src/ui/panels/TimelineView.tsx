@@ -1,3 +1,4 @@
+import { MathText } from '../math/MathText';
 import { useEffect, useRef, useState } from 'react';
 import type { TimelineEvent, TimelineEventType } from '../../../shared/types';
 import { useLesson } from '../../core/lesson';
@@ -123,8 +124,8 @@ export function TimelineView({ events }: { events: TimelineEvent[] }) {
                           <span className={`h-type ${type}`}>{TYPE_LABEL[type]}</span>
                           {e.figure && <span className="h-person">{e.figure}</span>}
                         </span>
-                        <strong className="h-title">{e.title}</strong>
-                        <span className="h-detail">{e.detail}</span>
+                        <MathText className="h-title" text={e.title} />
+                        <MathText className="h-detail" text={e.detail} />
                       </>
                     }
                   />

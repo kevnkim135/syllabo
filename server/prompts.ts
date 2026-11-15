@@ -3,15 +3,16 @@ import type { ExpandRequest, IntentRequest, LessonKind, LessonRequest, SolveRequ
 export const SYSTEM = `You are an expert teacher and curriculum designer.
 Be accurate and prefer well-established facts, names and dates.
 Respond with ONLY valid JSON matching the requested shape: no markdown, no code fences, no commentary.
-Unless a request says otherwise, write math as plain text (x^2, sqrt(x), integral of f dx), not LaTeX.`;
+Write every mathematical expression, formula and chemical equation in LaTeX between $...$ (inline) or $$...$$ (displayed), e.g. $F = ma$, $\\\\frac{dy}{dx}$. Because replies are JSON, double every backslash. Exceptions: labels and titles inside 3D model JSON, and voice-assistant replies, are plain text (LaTeX cannot render there).
+Be concise: students read on screens, so prefer short sentences and few words.`;
 
 const SCHEMAS: Record<LessonKind, string> = {
   timeline: `A JSON array of 10-16 events in chronological order covering the field's full history.
 Mix three types: "discovery" (a finding or invention), "event" (a historical event, publication, institution, war, experiment) and "figure" (a milestone in a prominent person's life or work). Always name the person when there is one. Include at least 3 of each type, so the timeline shows people and historical context, not only findings.
-[{"year": "1869", "type": "discovery", "title": "Periodic table", "figure": "Dmitri Mendeleev", "detail": "1-2 sentences on the finding and why it mattered", "related": ["2-4 short related terms, people or ideas worth exploring next"]}]`,
+[{"year": "1869", "type": "discovery", "title": "Periodic table", "figure": "Dmitri Mendeleev", "detail": "one sentence on the finding and why it mattered", "related": ["2-4 short related terms, people or ideas worth exploring next"]}]`,
 
   topics: `A JSON array of 5-8 top-level topics that together give a complete overview of the subject. Each has a one-sentence summary and 2-5 children (subtopics, each with a summary, no deeper nesting needed: the user can click to expand any of them later):
-[{"title": "...", "summary": "one sentence", "children": [{"title": "...", "summary": "one sentence"}]}]`,
+[{"title": "...", "summary": "under 12 words", "children": [{"title": "...", "summary": "under 12 words"}]}]`,
 
   problems: `A JSON array of 8-12 example problems with worked solutions, ordered from easiest to hardest, that together cover everything a student needs to know. Use exactly these difficulty labels:
 - "base": 2 trivial or base cases (zero, one, identity, empty, smallest valid input)
@@ -26,7 +27,7 @@ Write every mathematical expression in LaTeX between $...$ (inline) or $$...$$ (
 1. Chemistry / molecular biology -> molecule with realistic geometry (coordinates in angstroms, use bond order 2 or 3 where real):
 {"kind": "molecule", "title": "...", "atoms": [{"element": "O", "x": 0, "y": 0, "z": 0}], "bonds": [{"a": 0, "b": 1, "order": 1}]}
 
-2. Multivariable calculus / functions of two variables -> surface z = f(x, y), expr in mathjs syntax:
+2. Pure multivariable calculus with no real-world story (functions of two variables) -> surface z = f(x, y), expr in mathjs syntax. If the topic is an applied word problem (rates, optimization, motion), use a diagram scene of the real objects instead:
 {"kind": "surface", "title": "...", "expr": "sin(x) * cos(y)", "xRange": [-3, 3], "yRange": [-3, 3]}
 
 3. Physics or anything else -> a labeled diagram drawn like a textbook figure, coordinates within -5..5 (x right, y up):
@@ -36,7 +37,9 @@ Write every mathematical expression in LaTeX between $...$ (inline) or $$...$$ (
   {"type": "link", "a": "m1", "b": "m2", "label": "rope"},
   {"type": "path", "points": [[-4, -1.6], [0, 1], [4, -1.6]], "label": "trajectory"}
 ]}
-- "shape" makes a body a recognisable object; use one whenever it fits the lesson: ball, block, box, car, cart, plane, rocket, person, planet, sun, moon, satellite, boat, pulley, spring, ramp, charge.
+- Draw it like a textbook illustration of a real situation, NOT abstract spheres and cubes. Every body should have a "shape" that is a recognisable everyday object: ball, block, box, crate, car, truck, cart, plane, rocket, person, planet, sun, moon, satellite, boat, pulley, spring, ramp, charge, ladder, wall, tank (a cone-shaped water tank), cylinder (a can or pipe), cone, tree, house, cannon, balloon, table.
+- Applied math belongs here too, as a real scene: related rates -> a ladder leaning on a wall, or a cone tank draining; optimization -> an open box or a can; projectiles -> a cannon and a ball; inclined planes -> a crate on a ramp; orbits -> a sun and planets.
+- "radius" sets an object's size (default 0.4; a wall or house might be 1.5), "angle" tilts it in degrees (a ladder leaning at 70), "z" places it in depth for 3D scenes.
 - "motion" animates a body with constant acceleration (units per second; gravity is about ay = -9.8 scaled to fit, e.g. -4). Use it for kinematics, projectiles, orbits-as-arcs, falling objects, so the diagram plays like a simulation. Vectors attached to the body move with it. Keep moving bodies inside -5..5 for the whole loop.
 - "path" draws a dashed trajectory or outline. "ground" is the y of the ground line when objects rest on or move over ground.
 
@@ -87,10 +90,9 @@ export function buildExpandPrompt({ subject, topic, path = [], level = 'high sch
 
 Produce a JSON object:
 {"title": "${topic}",
- "explanation": "2-4 short paragraphs separated by \\n\\n explaining the topic clearly in the context above",
- "keyPoints": ["3-6 short bullet points a student must remember"],
- "example": "one concrete worked example or analogy (optional)",
- "imageQuery": "the title of the English Wikipedia article whose main image best illustrates this topic (a diagram, apparatus, structure or photo), e.g. \"Benzene\" or \"Projectile motion\"",
+ "explanation": "1-2 short paragraphs separated by \\n\\n, at most 70 words in total, explaining the topic clearly in the context above",
+ "keyPoints": ["3 bullet points a student must remember, each under 12 words"],
+ "example": "one short concrete example or analogy, at most 2 sentences (optional)",
  "subtopics": [{"title": "...", "summary": "one sentence"}]}
 Give 3-5 subtopics that go one level deeper than "${topic}".`;
 }
@@ -131,9 +133,11 @@ Actions (pick exactly one):
 - {"action": "sandboxRemove", "target": "..."}
 - {"action": "sandboxReact", "condition": "..."}: make the sandbox molecules react, optionally under a condition ("heat", "a spark", "a platinum catalyst", "in water"); omit condition if none given.
 - {"action": "sandboxClear"}
+- {"action": "sandboxPush", "target": "...", "direction": "left" | "right" | "up" | "down" | "closer" | "farther" | "together" | "apart", "force": 50}: shove or throw physical objects (cars, balls, crates, planets); force in newtons only if the student gives one.
+- {"action": "sandboxSetting", "setting": "gravity" | "friction" | "air" | "elastic", "on": true | false}: physics switches; "air" is air resistance, "elastic" makes collisions perfectly bouncy (no energy lost).
 - {"action": "none"}: chit-chat, or nothing actionable.
 
-When the sandbox is open, "add X", "put X in", "move/push X left", "heat them up", "react these" refer to the sandbox.
+When the sandbox is open, "add X", "put X in", "move X left", "heat them up", "react these" refer to the sandbox. The sandbox holds both molecules and physical objects: use sandboxPush for pushing, kicking, throwing or launching objects, sandboxMove for simply placing them.
 
 Decide "focus" vs "newLesson" by meaning, not shared words: "photosynthesis" during "organic chemistry" is a new lesson; "SN2 reactions" during "organic chemistry" is a focus.
 
@@ -155,8 +159,35 @@ Say what really happens. If they react under this condition, give the main produ
 
 Produce a JSON object:
 {"reacts": true | false,
- "equation": "balanced equation in plain text, e.g. CH4 + 2 O2 -> CO2 + 2 H2O (empty string if no reaction)",
+ "equation": "balanced equation in LaTeX, e.g. $\\\\mathrm{CH_4 + 2\\\\,O_2 \\\\rightarrow CO_2 + 2\\\\,H_2O}$ (empty string if no reaction)",
  "explanation": "2-3 short sentences: what happens and why, or why nothing happens and what would make it react",
  "products": [{"name": "Water", "count": 2, "molecule": {"kind": "molecule", "title": "Water (H2O)", "atoms": [...], "bonds": [...]}}]}
 Products use realistic 3D geometry in angstroms with hydrogens; "count" is the number of that molecule to show (1-6). Empty products when there is no reaction.`;
+}
+
+/** Several different example models at once, so "new example" is instant and never repeats. */
+export function buildExamplesPrompt({ subject, level = 'high school', focus, avoid = [] }: { subject: string; level?: string; focus?: string; avoid?: string[] }, n = 4) {
+  return `Subject: ${subject}${focus ? `\nFocus: "${focus}"` : ''}\nAudience level: ${level}
+
+Produce a JSON array of ${n} DIFFERENT interactive 3D models for this topic, each a separate illustration a student could flip through.
+Make them varied: different molecules, different functions, different everyday situations or objects. Do not repeat any of these, which the student has already seen: ${avoid.length ? avoid.map((a) => `"${a}"`).join(', ') : 'none'}.
+Each element uses exactly one of these shapes:
+
+${SCHEMAS.visual.replace(/^A JSON object describing ONE interactive 3D model that best illustrates a core idea of the subject\. Pick exactly one shape:\n\n/, '')}`;
+}
+
+const BODY = 'ball, block, box, crate, car, truck, cart, plane, rocket, person, planet, sun, moon, satellite, boat, pulley, spring, ramp, charge, ladder, wall, tank, cylinder, cone, tree, house, cannon, balloon, table';
+
+export function buildSandboxItemPrompt(name: string, subject = '', level = 'high school') {
+  return `A ${level} student studying "${subject || 'science'}" wants to put "${name}" into a 3D sandbox where things can be moved, pushed, collided and reacted.
+
+If it is a chemical substance, return a molecule with realistic 3D geometry (angstroms, hydrogens included, bond order 2 or 3 where real):
+{"kind": "molecule", "name": "Methane", "molecule": {"kind": "molecule", "title": "Methane (CH4)", "atoms": [{"element": "C", "x": 0, "y": 0, "z": 0}], "bonds": [{"a": 0, "b": 1, "order": 1}]}}
+
+Otherwise return a physical body:
+{"kind": "body", "name": "Car", "body": {"shape": "car", "mass": 1200, "radius": 1.2, "charge": 0}}
+- shape: one of ${BODY}
+- mass in kg, realistic for the object (a tennis ball 0.06, a person 70, a car 1200; for planets and stars use a relative mass so a sun is about 1000 and a planet about 1-10)
+- radius in scene units between 0.25 and 1.6, so objects of very different real size still fit on one bench
+- charge: for charged particles (proton +1, electron -1, an ion), else 0`;
 }

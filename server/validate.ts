@@ -1,6 +1,6 @@
 // Runtime validation of model output against shared/types.ts. Returns a cleaned value or undefined.
 import { evaluate } from 'mathjs';
-import { BODY_SHAPES, LESSON_KINDS, SCENES, type BodyShape, type MoleculeSpec, type ReactionResult, type SceneKind, type IntentResult, type LessonKind, type LessonMap, type Problem, type ScopeInfo, type TopicDetail, type TopicNode, type VisualSpec, type VoiceIntent } from '../shared/types';
+import { BODY_SHAPES, LESSON_KINDS, SANDBOX_SETTINGS, SCENES, type SandboxItemSpec, type SandboxSetting, type BodyShape, type MoleculeSpec, type ReactionResult, type SceneKind, type IntentResult, type LessonKind, type LessonMap, type Problem, type ScopeInfo, type TopicDetail, type TopicNode, type VisualSpec, type VoiceIntent } from '../shared/types';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
@@ -56,11 +56,18 @@ function visual(v: unknown): VisualSpec | undefined {
       if (!isObj(e) || e.type !== 'body') return e;
       const m = e.motion;
       const motion = isObj(m) && num(m.vx) && num(m.vy) ? { vx: m.vx, vy: m.vy, ax: num(m.ax) ? m.ax : 0, ay: num(m.ay) ? m.ay : 0, duration: num(m.duration) && m.duration > 0.3 && m.duration < 30 ? m.duration : 3 } : undefined;
-      return { ...e, shape: BODY_SHAPES.includes(e.shape as BodyShape) ? e.shape : undefined, color: str(e.color) ? e.color : undefined, motion };
+      return { ...e, shape: BODY_SHAPES.includes(e.shape as BodyShape) ? e.shape : undefined, color: str(e.color) ? e.color : undefined, motion, z: num(e.z) ? e.z : undefined, angle: num(e.angle) ? e.angle : undefined, radius: num(e.radius) && e.radius > 0.05 && e.radius < 6 ? e.radius : undefined };
     });
     return elements.length ? ({ ...v, elements: cleaned, scene: scene(v.scene), ground: num(v.ground) ? v.ground : undefined } as unknown as VisualSpec) : undefined;
   }
   return undefined;
+}
+
+/** Several visuals (POST /api/examples); invalid ones are dropped. */
+export function validateVisuals(raw: unknown): VisualSpec[] | undefined {
+  const list = Array.isArray(raw) ? raw : isObj(raw) ? Object.values(raw).find(Array.isArray) : undefined;
+  const out = (list ?? []).map((v) => visual(v)).filter((v): v is VisualSpec => !!v);
+  return out.length ? out : undefined;
 }
 
 const scene = (s: unknown): SceneKind | undefined => (SCENES.includes(s as SceneKind) ? (s as SceneKind) : undefined);
@@ -69,6 +76,20 @@ const scene = (s: unknown): SceneKind | undefined => (SCENES.includes(s as Scene
 export function validateMolecule(raw: unknown): MoleculeSpec | undefined {
   const v = visual(isObj(raw) ? { ...raw, kind: 'molecule' } : raw);
   return v?.kind === 'molecule' ? v : undefined;
+}
+
+export function validateSandboxItem(raw: unknown): SandboxItemSpec | undefined {
+  if (!isObj(raw) || !str(raw.name)) return undefined;
+  const name = raw.name.trim().slice(0, 60);
+  if (raw.kind === 'molecule') {
+    const molecule = validateMolecule(raw.molecule);
+    return molecule ? { kind: 'molecule', name, molecule } : undefined;
+  }
+  const b = raw.body;
+  if (raw.kind !== 'body' || !isObj(b) || !BODY_SHAPES.includes(b.shape as BodyShape)) return undefined;
+  const mass = num(b.mass) && b.mass > 0 ? Math.min(b.mass, 1e6) : 1;
+  const radius = num(b.radius) ? Math.min(1.6, Math.max(0.25, b.radius)) : 0.5;
+  return { kind: 'body', name, body: { shape: b.shape as BodyShape, mass, radius, color: str(b.color) ? b.color : undefined, charge: num(b.charge) && b.charge !== 0 ? Math.max(-3, Math.min(3, b.charge)) : undefined } };
 }
 
 export function validateReaction(raw: unknown): ReactionResult | undefined {
@@ -94,7 +115,6 @@ export function validateDetail(raw: unknown): TopicDetail | undefined {
     explanation: raw.explanation,
     keyPoints: Array.isArray(raw.keyPoints) ? raw.keyPoints.filter(str) : [],
     example: str(raw.example) ? raw.example : undefined,
-    imageQuery: str(raw.imageQuery) ? raw.imageQuery.trim().slice(0, 120) : undefined,
     subtopics,
   };
 }
@@ -147,6 +167,13 @@ export function validateIntent(raw: unknown): IntentResult | undefined {
     case 'sandboxAdd': intent = s(i.name) ? { action: 'sandboxAdd', name: s(i.name)!, count: num(i.count) && i.count >= 1 && i.count <= 6 ? Math.round(i.count) : undefined } : undefined; break;
     case 'sandboxRemove': intent = s(i.target) ? { action: 'sandboxRemove', target: s(i.target)! } : undefined; break;
     case 'sandboxReact': intent = { action: 'sandboxReact', condition: s(i.condition) }; break;
+    case 'sandboxSetting': intent = SANDBOX_SETTINGS.includes(i.setting as SandboxSetting) ? { action: 'sandboxSetting', setting: i.setting as SandboxSetting, on: i.on !== false } : undefined; break;
+    case 'sandboxPush': {
+      const dirs = ['left', 'right', 'up', 'down', 'closer', 'farther', 'together', 'apart'] as const;
+      const d = dirs.find((x) => x === i.direction);
+      intent = s(i.target) && d ? { action: 'sandboxPush', target: s(i.target)!, direction: d, force: num(i.force) && i.force > 0 ? Math.min(i.force, 1e6) : undefined } : undefined;
+      break;
+    }
     case 'sandboxMove': {
       const dirs = ['left', 'right', 'up', 'down', 'closer', 'farther', 'together', 'apart'] as const;
       const d = dirs.find((x) => x === i.direction);

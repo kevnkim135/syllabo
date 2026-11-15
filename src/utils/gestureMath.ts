@@ -135,7 +135,10 @@ export const POSE = {
   pinchOn: 0.28, // pinch ratio to start a pinch
   pinchOff: 0.42, // pinch ratio to end it (hysteresis)
   uniform: 0.25, // max spread of the four straightness values for "all fingers move together"
-  gatherMiddle: 0.4, // thumb tip to middle tip (hand sizes) for a three-finger pinch; off at +0.12
+  gatherMiddle: 0.27, // middle tip within this of BOTH the thumb and index tips (hand sizes) = three-finger pinch; off at +0.1
+  pointIndex: 0.8, // pointing: index straighter than this...
+  pointOthers: 0.78, // ...the other three bent past this...
+  pointMargin: 0.15, // ...and the index clearly the straightest
   spreadStraight: 0.8, // index and middle straighter than this for "spread"
   spreadFolded: 0.8, // ring and pinky must be bent more than this (straightness below it) for "spread"
   spreadThumb: 0.6, // thumb tip to index tip (hand sizes) at least this for "spread"
@@ -169,7 +172,9 @@ export function classifyHand(lm: Pt[], wasPinching = false, hint?: { name: strin
   const pinching = !isFist && pinch < (wasPinching ? POSE.pinchOff : POSE.pinchOn);
   const size = handSize(lm);
   const middleGap = dist3(lm[4], lm[12]) / size;
-  const gathering = pinching && middleGap < POSE.gatherMiddle + (wasGathering ? 0.12 : 0);
+  const gatherTol = POSE.gatherMiddle + (wasGathering ? 0.1 : 0);
+  // All three tips together: a two-finger pinch with the middle finger merely nearby stays a pinch (select, not zoom).
+  const gathering = pinching && middleGap < gatherTol && dist3(lm[8], lm[12]) / size < gatherTol + 0.05;
   const spreading =
     straight[0] > POSE.spreadStraight &&
     straight[1] > POSE.spreadStraight &&
@@ -183,7 +188,7 @@ export function classifyHand(lm: Pt[], wasPinching = false, hint?: { name: strin
   else if (gathering) pose = 'gather';
   else if (pinching) pose = 'pinch';
   else if (spreading) pose = 'spread';
-  else if (straight[0] > POSE.extended && straight.slice(1).every((s) => s < POSE.curled)) pose = 'point';
+  else if (straight[0] > POSE.pointIndex && straight.slice(1).every((s) => s < POSE.pointOthers) && straight[0] - Math.max(...straight.slice(1)) > POSE.pointMargin) pose = 'point';
   else if (straight.every((s) => s > POSE.extended)) pose = 'open';
   else if (hint && hint.score >= POSE.hintScore && HINTS[hint.name]) {
     const h = HINTS[hint.name];
