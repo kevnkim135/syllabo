@@ -178,7 +178,7 @@ export function expandFixture(topic: string): TopicDetail {
   };
 }
 
-const BROAD = /^(math|maths|mathematics|algebra|geometry|trigonometry|calculus|statistics|physics|chemistry|biology|economics|computer science|history|astronomy|(organic|inorganic|physical) chem(istry)?|org chem|(multivariable|differential|integral|vector) calculus|linear algebra|(quantum|classical) mechanics|thermodynamics|electromagnetism)$/;
+const BROAD = /^(math|maths|mathematics|algebra|geometry|trigonometry|calculus|statistics|physics|chemistry|biology|economics|computer science|artificial intelligence|machine learning|history|astronomy|(organic|inorganic|physical) chem(istry)?|org chem|(multivariable|differential|integral|vector) calculus|linear algebra|(quantum|classical) mechanics|thermodynamics|electromagnetism)$/;
 
 export function scopeFixture(subject: string): ScopeInfo {
   const broad = BROAD.test(subject.trim().toLowerCase());

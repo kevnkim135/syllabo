@@ -121,7 +121,7 @@ Give 3-5 subtopics that go one level deeper than "${topic}".`;
 
 export function buildIntentPrompt({ transcript, context: c }: IntentRequest) {
   const list = (xs?: string[]) => (xs?.length ? xs.map((x) => `"${x}"`).join(', ') : 'none');
-  return `You turn a student's spoken request into ONE action for LessonLab, a lesson app with four sections:
+  return `You turn a student's spoken request into ONE action for Syllabo, a lesson app with four sections:
 the interactive 3D model ("visual"), history ("timeline"), the topic map ("topics") and practice problems ("problems").
 
 Current state:

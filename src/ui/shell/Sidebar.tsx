@@ -34,7 +34,7 @@ export function Sidebar() {
     <nav className="sidebar" aria-label="Lesson sections">
       <button className="brand" onClick={lesson.home} title="Home (0)">
         {icon(<path d="M10 3 17.5 16.5h-15L10 3Z" fill="currentColor" />)}
-        <span className="label">LessonLab</span>
+        <span className="label">Syllabo</span>
       </button>
       {SECTIONS.map((k, i) => (
         <button

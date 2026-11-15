@@ -53,13 +53,13 @@ export interface LibraryState {
   error: string | null; // e.g. storage full
 }
 
-const KEY = 'lessonlab.library.v1';
+const KEY = 'syllabo.library.v1';
 const newId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 export const lessonTitle = (l: { subject: string | null; focus: string | null }) => (l.focus ? `${l.subject} › ${l.focus}` : (l.subject ?? ''));
 
 function read(): LibraryState {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(KEY) ?? localStorage.getItem('lessonlab.library.v1'); // saved lessons from before the rename
     if (raw) {
       const v = JSON.parse(raw) as Partial<LibraryState>;
       return { folders: v.folders ?? [], lessons: v.lessons ?? [], error: null };

@@ -28,7 +28,7 @@ const GESTURE_TEXT: Record<GestureLabel, string> = {
   modelPrev: 'Previous model',
 };
 const EVENTS: GestureLabel[] = ['newExample', 'home', 'modelNext', 'modelPrev'];
-const SWAP_KEY = 'lessonlab.swapHands';
+const SWAP_KEY = 'syllabo.swapHands';
 
 const icon = (children: ReactNode) => (
   <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>

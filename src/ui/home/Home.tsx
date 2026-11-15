@@ -4,7 +4,7 @@ import { lesson, useWorkspace } from '../../core/lesson';
 import { lessonTitle, useLibrary } from '../../core/library';
 import { DeltaField } from './DeltaField';
 
-const EXAMPLES = ['Organic chemistry', 'Multivariable calculus', 'Projectile motion', 'Chain rule'];
+const EXAMPLES = ['Math', 'Chemistry', 'Physics', 'Biology', 'Artificial intelligence'];
 
 export function Home() {
   const { tabs } = useWorkspace();
@@ -22,7 +22,7 @@ export function Home() {
       <DeltaField />
       <div className="home-center">
         <h1 className="wordmark">
-          Lesson<span>Lab</span>
+          Sylla<span>bo</span>
         </h1>
         <form className="ask" onSubmit={submit}>
           <input autoFocus value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="What do you want to learn?" aria-label="Topic" />

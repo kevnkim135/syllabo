@@ -28,7 +28,7 @@ export function ProblemsView({ problems }: { problems: Problem[] }) {
   const [filter, setFilter] = useState<Filter>('all');
   const [mode, setMode] = useState<'one' | 'all'>(() => {
     try {
-      return localStorage.getItem('lessonlab.problemsMode') === 'all' ? 'all' : 'one';
+      return localStorage.getItem('syllabo.problemsMode') === 'all' ? 'all' : 'one';
     } catch {
       return 'one';
     }
@@ -37,7 +37,7 @@ export function ProblemsView({ problems }: { problems: Problem[] }) {
   const pick = (m: 'one' | 'all') => {
     setMode(m);
     try {
-      localStorage.setItem('lessonlab.problemsMode', m);
+      localStorage.setItem('syllabo.problemsMode', m);
     } catch {
       /* per-browser preference only */
     }

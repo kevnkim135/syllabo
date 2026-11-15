@@ -35,7 +35,7 @@ models, modelIndex, solved, asked, savedAt, folderId`. `data.visual` is always `
 Actions: `start, setFocus, markExplored, goto, home, showLibrary, switchTo, close, retry, save, unsave, moveToFolder,
 openSaved, requestVisual, newExample, selectModel, stepModel, removeModel, ask, addSolved`.
 
-`src/core/library.ts`: saved lessons and folders in localStorage (`lessonlab.library.v1`); a saved lesson is
+`src/core/library.ts`: saved lessons and folders in localStorage (`syllabo.library.v1`); a saved lesson is
 re-saved automatically when it changes. Drill-down explanations are cached in localStorage too (`src/core/api.ts`).
 
 `src/core/assistant.ts`: resolves `ask` commands (free-form speech) through `POST /api/intent`, falling back to

@@ -16,7 +16,7 @@ export const fetchLesson = <K extends LessonKind>(req: LessonRequest & { kind: K
 
 // Drill-down explanations are kept in this browser too, so a saved lesson's opened notes and history
 // bubbles come back instantly instead of being generated again.
-const EXPAND_KEY = 'lessonlab.expand.v1';
+const EXPAND_KEY = 'syllabo.expand.v1';
 const EXPAND_MAX = 400;
 const expandKey = (r: ExpandRequest) => [r.level ?? '', r.subject, ...(r.path ?? []), r.topic].join('>').toLowerCase();
 function expandCache(): Record<string, TopicDetail> {
