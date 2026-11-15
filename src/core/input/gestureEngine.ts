@@ -280,7 +280,7 @@ export function createGestureInterpreter(emit: (cmd: Command) => void = commands
       if (pose === 'gather') return G.directManipulation ? 'none' : 'gather'; // no hold-zoom in the sandbox
       if (pose === 'spread') return G.directManipulation ? 'none' : 'spread';
       if (pose === 'open') return G.directManipulation ? 'none' : 'hand'; // no model swipes in the sandbox
-      if (pose === 'pinch') return 'grab';
+      if (pose === 'pinch') return G.directManipulation ? 'grab' : 'none'; // selecting and carrying are sandbox-only
       return 'none';
     }
     if (seen.length === 2) {
@@ -406,6 +406,17 @@ export function createGestureInterpreter(emit: (cmd: Command) => void = commands
       // the tracker losing the hand for a moment is not a release either
       if (t && ++t.miss < (t.dragging ? G.lostHoldFrames : 4)) continue;
       if (t) release(side, { ...t, down: -1e9 }); // a lost hand never counts as a tap
+      if (pointerShown[side]) emit({ type: 'pointer', hand: side, x: 0, y: 0, visible: false }), (pointerShown[side] = false);
+    }
+  }
+
+  /** Leaving the sandbox: end any drag and hide pointers, so nothing stays half-held. */
+  function dropHands() {
+    for (const side of ['left', 'right'] as Hand[]) {
+      const t = tracks[side];
+      if (t?.dragging) emit({ type: 'grab', hand: side, phase: 'end', dx: 0, dy: 0, dz: 0 });
+      delete tracks[side];
+      delete aimLock[side];
       if (pointerShown[side]) emit({ type: 'pointer', hand: side, x: 0, y: 0, visible: false }), (pointerShown[side] = false);
     }
   }
@@ -605,8 +616,9 @@ export function createGestureInterpreter(emit: (cmd: Command) => void = commands
     lastFrame = now;
     if (mode !== 'rotate') clutchSide = null;
 
-    // ---- per-hand pointers, taps and drags (independent of the mode) ----
-    trackHands(seen, now);
+    // ---- per-hand pointers, taps and drags: only in the sandbox (in the model view they would fight zoom and rotate) ----
+    if (G.directManipulation) trackHands(seen, now);
+    else dropHands();
 
     // ---- label ----
     let label: GestureLabel = seen.length ? 'idle' : 'none';

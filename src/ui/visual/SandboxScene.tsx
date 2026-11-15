@@ -11,7 +11,8 @@ import { BodyShapeMesh } from './shapes';
 const ANGSTROM = 1.6; // Molecule.tsx scale
 const EASE = 9; // 1/s, how fast molecules glide to where the store says they are
 const FLOOR = -2.6; // the lab bench (Environment.tsx)
-const WALL = 22; // bodies bounce off invisible walls this far from the centre
+const WALL = 11; // bodies bounce off invisible walls this far from the centre
+const MAGNET = 0.16; // pointer snaps to the nearest object within this much of the screen (in NDC units) beyond its edge
 const G_DOWN = 6; // gravity, scene units / s^2
 const G_ORBIT = 0.05; // between celestial bodies: a = G m / r^2
 const K_CHARGE = 6; // between charges: a = K q1 q2 / (m r^2)
@@ -435,6 +436,22 @@ export function SandboxScene() {
       const hit = raycaster.intersectObjects(targets, true)[0];
       let id: string | null = null;
       if (hit) for (let o: THREE.Object3D | null = hit.object; o && !id; o = o.parent) id = (o.userData.itemId as string) ?? null;
+      // magnetic: not exactly on anything? take the nearest object whose on-screen outline is close to the pointer,
+      // so small, far-away objects are as easy to pick as near ones
+      if (!id) {
+        let best = Infinity;
+        const cam = camera as THREE.PerspectiveCamera;
+        for (const it of list) {
+          const g = groups.current.get(it.id);
+          if (!g || it.dying) continue;
+          const c = g.position.clone().project(camera);
+          if (c.z > 1) continue; // behind the camera
+          const dist = cam.position.distanceTo(g.position);
+          const screenR = (radiusOf(it) / (dist * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)))) ; // radius in NDC
+          const d = Math.hypot((c.x - ndc.x) * cam.aspect, c.y - ndc.y) - screenR;
+          if (d < MAGNET && d < best) (best = d), (id = it.id);
+        }
+      }
       if (!drags.current.has(hand)) hover.current.set(hand, id);
       if (id) now.add(id);
       if (cur) {

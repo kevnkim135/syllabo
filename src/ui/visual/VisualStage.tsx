@@ -43,13 +43,13 @@ export function VisualStage({ spec, paused = false }: { spec: VisualSpec | null;
           <ambientLight intensity={0.85} />
           <directionalLight position={[5, 10, 5]} intensity={1.3} />
           <directionalLight position={[-6, -2, -4]} intensity={0.35} />
-          <Environment scene={scene} ground={!box && spec?.kind === 'diagram' ? (spec.ground ?? -2.6) : -2.6} size={box ? 60 : 26} />
+          <Environment scene={scene} ground={!box && spec?.kind === 'diagram' ? (spec.ground ?? -2.6) : -2.6} size={box ? 32 : 26} />
           {box ? (
             <SandboxScene />
           ) : (
             <group ref={orient}>{spec && <ModelLayers spec={spec} />}</group>
           )}
-          <CameraRig resetKey={box ? 'sandbox' : spec} active={!paused} orient={orient} homeRadius={box ? 15 : undefined} />
+          <CameraRig resetKey={box ? 'sandbox' : spec} active={!paused} orient={orient} homeRadius={box ? 10.5 : undefined} />
         </Canvas>
 
         <div key={box ? 'sandbox' : spec?.title} className="stage-title">

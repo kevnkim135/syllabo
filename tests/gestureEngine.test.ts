@@ -5,6 +5,16 @@ import { createGestureInterpreter, GESTURE, type GestureFrame, type HandInput } 
 import { makeHand, type HandOptions } from '../src/core/input/syntheticHand';
 
 const DT = 1000 / 30;
+/** Selecting and carrying only exist while the sandbox is on screen. */
+const sandboxTest = (name: string, fn: () => void) =>
+  test(name, () => {
+    GESTURE.directManipulation = true;
+    try {
+      fn();
+    } finally {
+      GESTURE.directManipulation = false;
+    }
+  });
 type Script = (frame: number, tMs: number) => HandInput[];
 
 /** Runs a scripted sequence at 30 fps through a fresh interpreter. */
@@ -264,7 +274,7 @@ test('overlay data: each hand reports the user side, pose and 21 filtered landma
 
 // ---------------- direct manipulation (sandbox) ----------------
 
-test('pointer: a pointing or pinching hand drives a mirrored screen pointer, hidden when it goes', () => {
+sandboxTest('pointer: a pointing or pinching hand drives a mirrored screen pointer, hidden when it goes', () => {
   const r = run((i) => (i < 20 ? [R({ curl: POINT, at: [0.3, 0.6] })] : []), 30);
   const ps = only(r.all, 'pointer');
   assert.ok(ps.length > 10);
@@ -273,7 +283,7 @@ test('pointer: a pointing or pinching hand drives a mirrored screen pointer, hid
   assert.deepEqual(ps.at(-1), { type: 'pointer', hand: 'right', x: 0, y: 0, visible: false });
 });
 
-test('tap: a quick pinch selects; holding becomes a drag with start, moves and end', () => {
+sandboxTest('tap: a quick pinch selects; holding becomes a drag with start, moves and end', () => {
   const quick = run((i) => [R(i >= 10 && i < 16 ? { pinch: true } : { curl: POINT })], 40);
   assert.deepEqual(only(quick.cmds, 'tap'), [{ type: 'tap', hand: 'right' }]);
   assert.deepEqual(only(quick.cmds, 'grab'), []);
@@ -294,7 +304,7 @@ test('scale: both hands pinching and spreading grows the selection', () => {
   assert.deepEqual(only(r.cmds, 'rotateAxis'), []);
 });
 
-test('two hands: each pinch drags on its own, so two objects can be carried at once', () => {
+sandboxTest('two hands: each pinch drags on its own, so two objects can be carried at once', () => {
   const r = run((i) => [
     L({ pinch: true, at: [0.7 - 0.15 * ramp(i, 20, 40), 0.6] }), // user's left hand moves toward the middle
     R({ pinch: true, at: [0.3 + 0.15 * ramp(i, 20, 40), 0.6] }),
@@ -328,7 +338,7 @@ test('sandbox mode: pointing and pinching never zoom or twirl, and rotation name
   }
 });
 
-test('holding: a carried object stays held through pinch flicker, a dropped tracking frame and the rotate gesture', () => {
+sandboxTest('holding: a carried object stays held through pinch flicker, a dropped tracking frame and the rotate gesture', () => {
   // pinch held 2 s; at frames 30 and 31 the pinch reads as a three-finger pinch, frame 40 the hand is lost,
   // frames 45-55 the other hand points (rotate mode); only the real release at frame 70 lets go
   const r = run((i) => {
@@ -345,7 +355,7 @@ test('holding: a carried object stays held through pinch flicker, a dropped trac
   assert.deepEqual(only(r.cmds, 'tap'), [], 'never mistaken for a tap');
 });
 
-test('holding: blurry half-open readings and the hand leaving the camera for a second keep the object held', () => {
+sandboxTest('holding: blurry half-open readings and the hand leaving the camera for a second keep the object held', () => {
   const r = run((i) => {
     if (i >= 30 && i < 60) return []; // hand out of the camera's view for 1 s
     if (i >= 20 && i < 24) return [R({ curl: [0.3, 0.6, 0.6, 0.6], thumbCurl: 0.5 })]; // a blurry, half-open reading
@@ -358,7 +368,7 @@ test('holding: blurry half-open readings and the hand leaving the camera for a s
   assert.ok(lastMove < end, 'moves continue after the hand comes back');
 });
 
-test('depth: moving the pinch toward the camera pushes the object away, pulling back brings it closer', () => {
+sandboxTest('depth: moving the pinch toward the camera pushes the object away, pulling back brings it closer', () => {
   // the hand's apparent size grows as it approaches the camera: scale 1.8 -> 2.6 frame heights per metre
   const toward = run((i) => [R({ pinch: true, at: [0.35, 0.6], scale: 1.8 + 0.8 * ramp(i, 15, 35) })], 50);
   const dzT = (only(toward.cmds, 'grab') as Extract<Command, { type: 'grab' }>[]).reduce((s, g) => s + g.dz, 0);
@@ -368,7 +378,7 @@ test('depth: moving the pinch toward the camera pushes the object away, pulling 
   assert.ok(dzB > 1, `away from the camera: dz ${dzB.toFixed(2)} (positive = toward the viewer)`);
 });
 
-test('responsive: a pinch that moves starts dragging at once, without waiting', () => {
+sandboxTest('responsive: a pinch that moves starts dragging at once, without waiting', () => {
   const r = run((i) => [R(i >= 10 ? { pinch: true, at: [0.3 + 0.03 * Math.max(0, i - 11), 0.6] } : { curl: POINT })], 20);
   const start = r.all.findIndex((c) => c.type === 'grab' && c.phase === 'start');
   const pinchFrame = r.all.findIndex((c) => c.type === 'pointer') ; // pointer shows from the first frames
@@ -400,7 +410,7 @@ test('sandbox: one hand pinching while the other points still grabs (and both ha
   }
 });
 
-test('press: selecting fires the moment the fingers close, even with the other fingers folded like a fist', () => {
+sandboxTest('press: selecting fires the moment the fingers close, even with the other fingers folded like a fist', () => {
   for (const pinch of [{ pinch: true }, { pinch: true, curl: [0, 1, 1, 1] as [number, number, number, number] }]) {
     const r = run((i) => [R(i < 10 ? { curl: POINT } : pinch)], 14);
     const press = r.all.findIndex((c) => c.type === 'press');
@@ -425,4 +435,11 @@ test('open hand: held open it lets go once; a passing open hand does not; no mod
   } finally {
     GESTURE.directManipulation = false;
   }
+});
+
+test('model view: pointing and pinching never select or carry, and never block zoom or rotate', () => {
+  const r = run((i) => [R(i < 15 ? { curl: POINT } : { pinch: true, at: [0.3 + 0.005 * i, 0.6] })], 50);
+  for (const t of ['pointer', 'press', 'tap', 'grab'] as const) assert.deepEqual(only(r.all, t), [], `no ${t} outside the sandbox`);
+  assert.ok(only(run(() => [R({ gather: true })], 60).cmds, 'zoom').length > 5, 'three-finger zoom still works');
+  assert.ok(only(run(circling('screen'), 80).cmds, 'rotateAxis').length > 10, 'two-hand rotate still works');
 });
